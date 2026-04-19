@@ -1,0 +1,21 @@
+{
+  "extends": "@react-native/typescript-config",
+  "compilerOptions": {
+    /* Override the restrictive types from the base config */
+    "types": ["node"],
+    "baseUrl": ".",
+    "paths": {
+      "*": ["src/*"]
+    },
+    /* Ensure moduleResolution matches base config requirements */
+    "moduleResolution": "bundler",
+    "strict": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "resolveJsonModule": true,
+    "jsx": "react-native"
+  },
+  "include": ["src/**/*.ts", "src/**/*.tsx", "App.tsx", "index.js"],
+  "exclude": ["node_modules", "babel.config.js", "metro.config.js", "jest.config.js"]
+}
