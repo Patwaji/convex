@@ -1,17 +1,21 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, KeyboardAvoidingView, Platform, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, KeyboardAvoidingView, Platform, TouchableOpacity, StatusBar } from 'react-native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { AuthStackParamList } from '../../../navigation/types';
 import { AuthInput } from '../components/AuthInput';
 import { PrimaryButton } from '../../../shared/components/PrimaryButton';
 import { useAuthStore } from '../store/authStore';
 import { apiClient } from '../../../shared/api/client';
+import { triggerGlobalAlert } from '../../../shared/store/globalAlertStore';
+import { categoryThemes } from '../../../shared/theme/categoryThemes';
 
 type LoginScreenNavigationProp = StackNavigationProp<AuthStackParamList, 'Login'>;
 
 interface Props {
   navigation: LoginScreenNavigationProp;
 }
+
+const THEME = categoryThemes.other;
 
 export default function LoginScreen({ navigation }: Props) {
   const [email, setEmail] = useState('');
@@ -22,7 +26,11 @@ export default function LoginScreen({ navigation }: Props) {
 
   const handleLogin = async () => {
     if (!email || !password) {
-      Alert.alert('Error', 'Please fill in all fields');
+      triggerGlobalAlert({
+        type: 'warning',
+        title: 'ERROR',
+        message: 'Please fill in all fields',
+      });
       return;
     }
 
@@ -32,10 +40,20 @@ export default function LoginScreen({ navigation }: Props) {
       const { user, accessToken, refreshToken } = response.data.data;
       await login(user, accessToken, refreshToken);
     } catch (error: any) {
-      Alert.alert(
-        'Login Failed', 
-        error.response?.data?.error?.message || 'Something went wrong. Please try again.'
-      );
+      const apiMessage = error?.response?.data?.error?.message;
+      const fallbackMessage = error?.message ? `Network/Client error: ${error.message}` : 'Something went wrong. Please try again.';
+      console.log('Login error debug:', {
+        baseURL: (apiClient.defaults as any)?.baseURL,
+        message: error?.message,
+        code: error?.code,
+        status: error?.response?.status,
+        data: error?.response?.data,
+      });
+      triggerGlobalAlert({
+        type: 'error',
+        title: 'LOGIN FAILED',
+        message: apiMessage || fallbackMessage,
+      });
     } finally {
       setIsLoading(false);
     }
@@ -43,13 +61,14 @@ export default function LoginScreen({ navigation }: Props) {
 
   return (
     <KeyboardAvoidingView 
-      style={styles.container}
+      style={[styles.container, { backgroundColor: THEME.background }]}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
+      <StatusBar barStyle="dark-content" backgroundColor={THEME.background} />
       <View style={styles.content}>
         <View style={styles.header}>
-          <Text style={styles.title}>Welcome Back</Text>
-          <Text style={styles.subtitle}>Discover the best events around you.</Text>
+          <Text style={[styles.title, { color: THEME.textPrimary }]}>Welcome Back</Text>
+          <Text style={[styles.subtitle, { color: THEME.textSecondary }]}>Discover the best events around you.</Text>
         </View>
 
         <View style={styles.form}>
@@ -60,6 +79,7 @@ export default function LoginScreen({ navigation }: Props) {
             autoCapitalize="none"
             value={email}
             onChangeText={setEmail}
+            theme={THEME}
           />
           <AuthInput
             label="Password"
@@ -67,6 +87,7 @@ export default function LoginScreen({ navigation }: Props) {
             secureTextEntry
             value={password}
             onChangeText={setPassword}
+            theme={THEME}
           />
           
           <PrimaryButton 
@@ -74,13 +95,14 @@ export default function LoginScreen({ navigation }: Props) {
             onPress={handleLogin} 
             isLoading={isLoading} 
             style={styles.button}
+            theme={THEME}
           />
         </View>
 
         <View style={styles.footer}>
-          <Text style={styles.footerText}>Don't have an account? </Text>
+          <Text style={[styles.footerText, { color: THEME.textSecondary }]}>Don't have an account? </Text>
           <TouchableOpacity onPress={() => navigation.navigate('Signup')}>
-            <Text style={styles.link}>Sign Up</Text>
+            <Text style={[styles.link, { color: THEME.accent }]}>Sign Up</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -91,7 +113,6 @@ export default function LoginScreen({ navigation }: Props) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
   },
   content: {
     flex: 1,
@@ -104,13 +125,11 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 40,
     fontWeight: '800',
-    color: '#0F172A',
     marginBottom: 12,
     letterSpacing: -1,
   },
   subtitle: {
     fontSize: 16,
-    color: '#64748B',
     lineHeight: 24,
   },
   form: {
@@ -125,11 +144,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   footerText: {
-    color: '#64748B',
     fontSize: 15,
   },
   link: {
-    color: '#6366F1',
     fontWeight: '700',
     fontSize: 15,
   },

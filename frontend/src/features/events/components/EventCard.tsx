@@ -116,7 +116,7 @@ export const EventCard: React.FC<EventCardProps> = ({ event, onPress }) => {
         <View style={styles.detailsRow}>
           <Icon name="map-pin" size={14} color={theme.textSecondary} />
           <Text style={[styles.dateText, { color: theme.textSecondary }]} numberOfLines={1}>
-            {event.venue.name}
+            {event.venue.address || event.venue.city}
           </Text>
         </View>
         

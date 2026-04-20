@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Alert, TextInput, Modal, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, TextInput, Modal, ScrollView } from 'react-native';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import FastImage from 'react-native-fast-image';
 import { format } from 'date-fns';
@@ -9,8 +9,19 @@ import { apiClient } from '../../../shared/api/client';
 import { useAuthStore } from '../../auth/store/authStore';
 import { categoryThemes, getStylesForCategory } from '../../../shared/theme/categoryThemes';
 import { EventCategory } from '../../events/types';
+import { triggerGlobalAlert } from '../../../shared/store/globalAlertStore';
 
 type FilterTab = 'pending' | 'approved' | 'rejected' | 'flagged';
+
+type PaginatedResponse<T> = {
+  items: T[];
+  pagination?: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+};
 
 const THEME = {
   background: '#0B0F1A',
@@ -41,42 +52,43 @@ export default function AdminScreen() {
   const { user } = useAuthStore();
   const [activeTab, setActiveTab] = useState<FilterTab>('pending');
   const [rejectModal, setRejectModal] = useState<{ visible: boolean; eventId: string | null }>({ visible: false, eventId: null });
+  const [actionsModal, setActionsModal] = useState<{ visible: boolean; eventId: string | null }>({ visible: false, eventId: null });
+  const [proofRequestModal, setProofRequestModal] = useState<{ visible: boolean; eventId: string | null }>({ visible: false, eventId: null });
+  const [detailsModal, setDetailsModal] = useState<{ visible: boolean; event: any | null }>({ visible: false, event: null });
+  const [requestSentModalVisible, setRequestSentModalVisible] = useState(false);
   const [selectedReason, setSelectedReason] = useState<string | null>(null);
   const [customNote, setCustomNote] = useState('');
+  const [proofRequestNote, setProofRequestNote] = useState('');
+
+  const fetchAdminEvents = async (path: string): Promise<PaginatedResponse<any>> => {
+    const res = await apiClient.get(path, { params: { page: 1, limit: 25 } });
+    return {
+      items: res.data.data ?? [],
+      pagination: res.data.pagination,
+    };
+  };
 
   const { data: pendingEvents, isLoading: loadingPending } = useQuery({
     queryKey: ['admin_events_pending'],
-    queryFn: async () => {
-      const res = await apiClient.get('/admin/events/pending');
-      return res.data.data;
-    },
+    queryFn: async () => fetchAdminEvents('/admin/events/pending'),
     enabled: user?.role === 'admin',
   });
 
   const { data: approvedEvents, isLoading: loadingApproved } = useQuery({
     queryKey: ['admin_events_approved'],
-    queryFn: async () => {
-      const res = await apiClient.get('/admin/events/approved');
-      return res.data.data;
-    },
+    queryFn: async () => fetchAdminEvents('/admin/events/approved'),
     enabled: user?.role === 'admin' && activeTab === 'approved',
   });
 
   const { data: rejectedEvents, isLoading: loadingRejected } = useQuery({
     queryKey: ['admin_events_rejected'],
-    queryFn: async () => {
-      const res = await apiClient.get('/admin/events/rejected');
-      return res.data.data;
-    },
+    queryFn: async () => fetchAdminEvents('/admin/events/rejected'),
     enabled: user?.role === 'admin' && activeTab === 'rejected',
   });
 
   const { data: flaggedEvents, isLoading: loadingFlagged } = useQuery({
     queryKey: ['admin_events_flagged'],
-    queryFn: async () => {
-      const res = await apiClient.get('/admin/events/flagged');
-      return res.data.data;
-    },
+    queryFn: async () => fetchAdminEvents('/admin/events/flagged'),
     enabled: user?.role === 'admin' && activeTab === 'flagged',
   });
 
@@ -86,7 +98,11 @@ export default function AdminScreen() {
       queryClient.invalidateQueries({ queryKey: ['admin_events_pending'] });
       queryClient.invalidateQueries({ queryKey: ['admin_events_approved'] });
       queryClient.invalidateQueries({ queryKey: ['events'] });
-      Alert.alert('◆ APPROVED', 'Event has been published!');
+      triggerGlobalAlert({
+        type: 'success',
+        title: '◆ APPROVED',
+        message: 'Event has been published!',
+      });
     },
   });
 
@@ -99,7 +115,25 @@ export default function AdminScreen() {
       setRejectModal({ visible: false, eventId: null });
       setSelectedReason(null);
       setCustomNote('');
-      Alert.alert('◇ REJECTED', 'Event has been removed.');
+      triggerGlobalAlert({
+        type: 'warning',
+        title: '◇ REJECTED',
+        message: 'Event has been removed.',
+      });
+    },
+  });
+
+  const requestProofMutation = useMutation({
+    mutationFn: async ({ id, note }: { id: string; note?: string }) =>
+      apiClient.patch(`/admin/events/${id}/request-proof`, { note }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin_events_pending'] });
+      queryClient.invalidateQueries({ queryKey: ['admin_events_flagged'] });
+      queryClient.invalidateQueries({ queryKey: ['events'] });
+      setProofRequestModal({ visible: false, eventId: null });
+      setActionsModal({ visible: false, eventId: null });
+      setProofRequestNote('');
+      setRequestSentModalVisible(true);
     },
   });
 
@@ -113,6 +147,14 @@ export default function AdminScreen() {
       reason = found ? found.label.replace('✗ ', '') : customNote;
     }
     rejectMutation.mutate({ id: rejectModal.eventId, reason });
+  };
+
+  const handleRequestProof = () => {
+    if (!proofRequestModal.eventId) return;
+    requestProofMutation.mutate({
+      id: proofRequestModal.eventId,
+      note: proofRequestNote.trim() || undefined,
+    });
   };
 
   if (user?.role !== 'admin') {
@@ -131,10 +173,10 @@ export default function AdminScreen() {
 
   const getData = () => {
     switch (activeTab) {
-      case 'pending': return pendingEvents || [];
-      case 'approved': return approvedEvents || [];
-      case 'rejected': return rejectedEvents || [];
-      case 'flagged': return flaggedEvents || [];
+      case 'pending': return pendingEvents?.items || [];
+      case 'approved': return approvedEvents?.items || [];
+      case 'rejected': return rejectedEvents?.items || [];
+      case 'flagged': return flaggedEvents?.items || [];
       default: return [];
     }
   };
@@ -142,13 +184,16 @@ export default function AdminScreen() {
   const isLoading = loadingPending || loadingApproved || loadingRejected || loadingFlagged;
   const data = getData();
 
-  const pendingCount = pendingEvents?.length || 0;
-  const approvedToday = (approvedEvents || []).filter((e: any) => {
+  const pendingCount = pendingEvents?.pagination?.total || pendingEvents?.items?.length || 0;
+  const approvedToday = (approvedEvents?.items || []).filter((e: any) => {
     const created = new Date(e.updatedAt);
     const today = new Date();
     return created.toDateString() === today.toDateString();
   }).length;
-  const totalManaged = (pendingEvents?.length || 0) + (approvedEvents?.length || 0) + (rejectedEvents?.length || 0);
+  const totalManaged =
+    (pendingEvents?.pagination?.total || pendingEvents?.items?.length || 0) +
+    (approvedEvents?.pagination?.total || approvedEvents?.items?.length || 0) +
+    (rejectedEvents?.pagination?.total || rejectedEvents?.items?.length || 0);
 
   const TabButton = ({ tab, label, count, color }: { tab: FilterTab; label: string; count?: number; color: string }) => (
     <TouchableOpacity 
@@ -172,7 +217,11 @@ export default function AdminScreen() {
     const isNewOrganizer = item.organizer?.createdEventsCount <= 1;
 
     return (
-      <View style={[styles.eventCard, { backgroundColor: THEME.surface, borderColor: THEME.border }]}>
+      <TouchableOpacity
+        activeOpacity={0.9}
+        style={[styles.eventCard, { backgroundColor: THEME.surface, borderColor: THEME.border }]}
+        onPress={() => setDetailsModal({ visible: true, event: item })}
+      >
         <View style={styles.cardTop}>
           <FastImage
             source={{ uri: item.coverImage || 'https://images.unsplash.com/photo-1501281668745-f7f57925c3b4?w=200' }}
@@ -198,6 +247,14 @@ export default function AdminScreen() {
               )}
             </View>
           </View>
+          {activeTab === 'pending' && (
+            <TouchableOpacity
+              style={styles.moreButton}
+              onPress={() => setActionsModal({ visible: true, eventId: item._id })}
+            >
+              <Icon name="more-vertical" size={16} color={THEME.textSecondary} />
+            </TouchableOpacity>
+          )}
         </View>
 
         <Text style={styles.eventTitle} numberOfLines={2}>
@@ -242,7 +299,7 @@ export default function AdminScreen() {
             </TouchableOpacity>
           </View>
         )}
-      </View>
+      </TouchableOpacity>
     );
   };
 
@@ -277,18 +334,23 @@ export default function AdminScreen() {
             <Text style={styles.statLabel}>TOTAL</Text>
           </View>
           <View style={[styles.statBox, { borderColor: THEME.warning + '40' }]}>
-            <Text style={[styles.statValue, { color: THEME.warning }]}>{flaggedEvents?.length || 0}</Text>
+            <Text style={[styles.statValue, { color: THEME.warning }]}>{flaggedEvents?.pagination?.total || flaggedEvents?.items?.length || 0}</Text>
             <Text style={styles.statLabel}>FLAGGED</Text>
           </View>
         </View>
 
         {/* Tab Bar */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tabScroll}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.tabScroll}
+          contentContainerStyle={styles.tabScrollContent}
+        >
           <View style={styles.tabBar}>
             <TabButton tab="pending" label="Pending" count={pendingCount} color={THEME.danger} />
             <TabButton tab="approved" label="Approved" color={THEME.success} />
             <TabButton tab="rejected" label="Rejected" color={THEME.textSecondary} />
-            <TabButton tab="flagged" label="Flagged" count={flaggedEvents?.length} color={THEME.warning} />
+            <TabButton tab="flagged" label="Flagged" count={flaggedEvents?.pagination?.total || flaggedEvents?.items?.length} color={THEME.warning} />
           </View>
         </ScrollView>
       </View>
@@ -362,6 +424,111 @@ export default function AdminScreen() {
           </View>
         </View>
       </Modal>
+
+      <Modal visible={actionsModal.visible} animationType="fade" transparent>
+        <TouchableOpacity style={styles.modalOverlay} onPress={() => setActionsModal({ visible: false, eventId: null })}>
+          <View style={styles.actionsModalContent}>
+            <TouchableOpacity
+              style={styles.actionsRow}
+              onPress={() => {
+                setProofRequestModal({ visible: true, eventId: actionsModal.eventId });
+                setActionsModal({ visible: false, eventId: null });
+              }}
+            >
+              <Icon name="alert-circle" size={16} color={THEME.warning} />
+              <Text style={[styles.actionsText, { color: THEME.textPrimary }]}>Ask for more proof</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      <Modal visible={proofRequestModal.visible} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: THEME.warning }]}>◇ REQUEST MORE PROOF</Text>
+              <TouchableOpacity onPress={() => setProofRequestModal({ visible: false, eventId: null })}>
+                <Icon name="x" size={20} color={THEME.textSecondary} />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.modalSubtitle}>// OPTIONAL NOTE TO ORGANIZER:</Text>
+            <TextInput
+              style={styles.noteInput}
+              placeholder="Example: please share booking link, website, or organizer identity proof"
+              placeholderTextColor={THEME.textSecondary}
+              value={proofRequestNote}
+              onChangeText={setProofRequestNote}
+              multiline
+            />
+
+            <TouchableOpacity
+              style={[styles.rejectButton, requestProofMutation.isPending && styles.rejectButtonDisabled]}
+              onPress={handleRequestProof}
+              disabled={requestProofMutation.isPending}
+            >
+              <Text style={styles.rejectButtonText}>SEND REQUEST</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={detailsModal.visible} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: THEME.accent }]}>◆ EVENT DETAILS</Text>
+              <TouchableOpacity onPress={() => setDetailsModal({ visible: false, event: null })}>
+                <Icon name="x" size={20} color={THEME.textSecondary} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView>
+              <Text style={[styles.reasonText, { fontSize: 16, marginBottom: 8 }]}>{detailsModal.event?.title}</Text>
+              <Text style={[styles.modalSubtitle, { marginBottom: 8 }]}>ORGANIZER</Text>
+              <Text style={styles.reasonText}>{detailsModal.event?.organizer?.name || '-'}</Text>
+              <Text style={[styles.modalSubtitle, { marginTop: 14, marginBottom: 8 }]}>FLAG STATUS</Text>
+              <Text style={styles.reasonText}>{detailsModal.event?.flagReason || 'Not flagged'}</Text>
+
+              <Text style={[styles.modalSubtitle, { marginTop: 14, marginBottom: 8 }]}>ADDITIONAL PROOF</Text>
+              {detailsModal.event?.additionalProof?.additionalInfo ? (
+                <View>
+                  <Text style={styles.reasonText}>{detailsModal.event.additionalProof.additionalInfo}</Text>
+                  {!!detailsModal.event.additionalProof.contactPhone && (
+                    <Text style={[styles.reasonText, { marginTop: 8 }]}>Phone: {detailsModal.event.additionalProof.contactPhone}</Text>
+                  )}
+                  {!!detailsModal.event.additionalProof.contactEmail && (
+                    <Text style={[styles.reasonText, { marginTop: 4 }]}>Email: {detailsModal.event.additionalProof.contactEmail}</Text>
+                  )}
+                  {!!detailsModal.event.additionalProof.submittedAt && (
+                    <Text style={[styles.reasonText, { marginTop: 4, color: THEME.textSecondary }]}>Submitted {format(new Date(detailsModal.event.additionalProof.submittedAt), 'MMM d, HH:mm')}</Text>
+                  )}
+                </View>
+              ) : (
+                <Text style={[styles.reasonText, { color: THEME.textSecondary }]}>No additional proof submitted yet.</Text>
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={requestSentModalVisible} animationType="fade" transparent>
+        <View style={styles.modalOverlayCenter}>
+          <View style={styles.successModalCard}>
+            <View style={styles.successIconWrap}>
+              <Icon name="send" size={20} color={THEME.accent} />
+            </View>
+            <Text style={styles.successTitle}>◆ REQUEST SENT</Text>
+            <Text style={styles.successMessage}>Organizer has been asked for additional proof.</Text>
+            <TouchableOpacity
+              style={styles.successButton}
+              onPress={() => setRequestSentModalVisible(false)}
+            >
+              <Text style={styles.successButtonText}>OK</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -386,7 +553,8 @@ const styles = StyleSheet.create({
   statValue: { fontSize: 22, fontWeight: '700' },
   statLabel: { fontSize: 9, color: '#6B7280', marginTop: 4, letterSpacing: 1 },
 
-  tabScroll: { marginHorizontal: -16, paddingHorizontal: 16 },
+  tabScroll: { marginHorizontal: -16 },
+  tabScrollContent: { paddingHorizontal: 16, paddingRight: 26 },
   tabBar: { flexDirection: 'row', gap: 8 },
   tabButton: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 10, borderRadius: 6, backgroundColor: '#151B2B', borderWidth: 1, borderColor: '#00F0FF20', gap: 8 },
   tabLabel: { fontSize: 11, fontWeight: '600', color: '#6B7280', letterSpacing: 1 },
@@ -410,6 +578,7 @@ const styles = StyleSheet.create({
   categoryTag: { alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 4, borderWidth: 1 },
   categoryText: { fontSize: 8, fontWeight: '700', letterSpacing: 0.5 },
   badgeRow: { flexDirection: 'row', gap: 6 },
+  moreButton: { marginLeft: 6, width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: '#0B0F1A' },
   newOrgBadge: { backgroundColor: '#F59E0B20', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 3 },
   newOrgText: { fontSize: 7, fontWeight: '700', color: '#F59E0B', letterSpacing: 0.5 },
   flaggedTag: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 3 },
@@ -430,10 +599,20 @@ const styles = StyleSheet.create({
   actionText: { fontSize: 11, fontWeight: '700', letterSpacing: 1 },
 
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'flex-end' },
+  modalOverlayCenter: { flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'center', paddingHorizontal: 24 },
   modalContent: { backgroundColor: '#151B2B', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, paddingBottom: 40 },
+  successModalCard: { backgroundColor: '#151B2B', borderRadius: 14, borderWidth: 1, borderColor: '#00F0FF30', padding: 18 },
+  successIconWrap: { width: 42, height: 42, borderRadius: 21, backgroundColor: '#00F0FF15', borderWidth: 1, borderColor: '#00F0FF40', alignItems: 'center', justifyContent: 'center', marginBottom: 14 },
+  successTitle: { fontSize: 16, fontWeight: '700', color: '#00F0FF', letterSpacing: 1, marginBottom: 8 },
+  successMessage: { fontSize: 13, color: '#E8ECF1', lineHeight: 19, marginBottom: 16 },
+  successButton: { alignSelf: 'flex-end', backgroundColor: '#00F0FF20', borderWidth: 1, borderColor: '#00F0FF60', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8 },
+  successButtonText: { color: '#00F0FF', fontWeight: '700', letterSpacing: 0.8 },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
   modalTitle: { fontSize: 18, fontWeight: '700', color: '#EF4444', letterSpacing: 1 },
   modalSubtitle: { fontSize: 11, color: '#6B7280', marginBottom: 16, letterSpacing: 1 },
+  actionsModalContent: { backgroundColor: '#151B2B', borderRadius: 12, marginHorizontal: 20, marginBottom: 120, borderWidth: 1, borderColor: '#00F0FF20' },
+  actionsRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16, paddingVertical: 14 },
+  actionsText: { fontSize: 14, fontWeight: '600' },
   reasonRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#00F0FF10' },
   radioDot: { width: 16, height: 16, borderRadius: 8, borderWidth: 2, borderColor: '#6B7280', marginRight: 12 },
   reasonText: { fontSize: 14, color: '#E8ECF1', flex: 1 },

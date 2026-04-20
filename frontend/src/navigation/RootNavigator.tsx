@@ -5,6 +5,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { NavigationContainer } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Icon from 'react-native-vector-icons/Feather';
+import { useQuery } from '@tanstack/react-query';
 
 import { AuthStackParamList, AppTabsParamList, RootStackParamList, EventsStackParamList } from './types';
 import { useAuthStore } from '../features/auth/store/authStore';
@@ -12,6 +13,7 @@ import { useEventsStore } from '../features/events/store/eventsStore';
 import { apiClient } from '../shared/api/client';
 import { useNotificationStore } from '../features/notifications/store/notificationStore';
 import { categoryThemes, EventCategory, CategoryTheme } from '../shared/theme/categoryThemes';
+import GlobalThemedAlertHost from '../shared/components/GlobalThemedAlertHost';
 
 import LoginScreen from '../features/auth/screens/LoginScreen';
 import SignupScreen from '../features/auth/screens/SignupScreen';
@@ -47,8 +49,31 @@ const EventsStack = createStackNavigator<EventsStackParamList>();
 const AppTabs = createBottomTabNavigator<AppTabsParamList>();
 const RootStack = createStackNavigator<RootStackParamList>();
 
+const AUTH_THEME = {
+  dark: true,
+  colors: {
+    primary: '#00F0FF',
+    background: '#0A0A0F',
+    card: '#12121A',
+    text: '#E8ECF1',
+    border: '#2D2D3A',
+    notification: '#00F0FF',
+  },
+  fonts: {
+    regular: { fontFamily: 'System', fontWeight: '400' },
+    medium: { fontFamily: 'System', fontWeight: '500' },
+    bold: { fontFamily: 'System', fontWeight: '700' },
+    heavy: { fontFamily: 'System', fontWeight: '900' },
+  },
+};
+
 const AuthNavigator = () => (
-  <AuthStack.Navigator screenOptions={{ headerShown: false }}>
+  <AuthStack.Navigator 
+    screenOptions={{ 
+      headerShown: false,
+      cardStyle: { backgroundColor: '#F8FAFC' },
+    }}
+  >
     <AuthStack.Screen name="Login" component={LoginScreen} />
     <AuthStack.Screen name="Signup" component={SignupScreen} />
   </AuthStack.Navigator>
@@ -64,7 +89,6 @@ const EventsNavigator = () => (
 );
 
 const AdminNotificationsScreen = () => {
-  const { setUnreadCount } = useNotificationStore();
   return <NotificationsScreen adminTheme={ADMIN_THEME} />;
 };
 
@@ -72,63 +96,90 @@ const AdminProfileScreen = () => {
   return <ProfileScreen adminTheme={ADMIN_THEME} />;
 };
 
-const AdminNavigator = () => (
-  <AppTabs.Navigator
-    screenOptions={{
-      tabBarActiveTintColor: ADMIN_THEME.accent,
-      tabBarInactiveTintColor: ADMIN_THEME.textSecondary,
-      headerShown: false,
-      tabBarStyle: {
-        backgroundColor: ADMIN_THEME.background,
-        borderTopWidth: 0,
-        height: 70,
-        paddingTop: 8,
-        paddingBottom: 8,
-      },
-      tabBarLabelStyle: { fontSize: 10, fontWeight: '600', letterSpacing: 1.5 },
-    }}
-  >
-    <AppTabs.Screen 
-      name="Admin" 
-      component={AdminScreen} 
-      options={{ 
-        title: 'COMMAND',
-        tabBarIcon: ({ color, size }) => (
-          <View style={{ alignItems: 'center', justifyContent: 'center', width: 40, height: 32, borderRadius: 8, backgroundColor: color + '15' }}>
-            <Icon name="hexagon" size={size - 2} color={color} />
-          </View>
-        ),
-      }} 
-    />
-    <AppTabs.Screen 
-      name="Notifications" 
-      component={AdminNotificationsScreen} 
-      options={{ 
-        title: 'ALERTS',
-        tabBarIcon: ({ color, size }) => (
-          <View style={{ alignItems: 'center', justifyContent: 'center', width: 40, height: 32, borderRadius: 8, backgroundColor: color + '15' }}>
-            <Icon name="bell" size={size - 2} color={color} />
-          </View>
-        ),
-      }} 
-    />
-    <AppTabs.Screen 
-      name="Profile" 
-      component={AdminProfileScreen}
-      options={{ 
-        title: 'PROFILE',
-        tabBarIcon: ({ color, size }) => (
-          <View style={{ alignItems: 'center', justifyContent: 'center', width: 40, height: 32, borderRadius: 8, backgroundColor: color + '15' }}>
-            <Icon name="user" size={size - 2} color={color} />
-          </View>
-        ),
-      }} 
-    />
-  </AppTabs.Navigator>
-);
+function NotificationTabIcon({
+  color,
+  size,
+  showDot,
+  backgroundColor,
+}: {
+  color: string;
+  size: number;
+  showDot: boolean;
+  backgroundColor: string;
+}) {
+  return (
+    <View style={{ alignItems: 'center', justifyContent: 'center', width: 40, height: 32, borderRadius: 8, backgroundColor }}>
+      <Icon name="bell" size={size - 2} color={color} />
+      {showDot ? <View style={styles.notificationDot} /> : null}
+    </View>
+  );
+}
+
+const AdminNavigator = () => {
+  const unreadCount = useNotificationStore((state) => state.unreadCount);
+
+  return (
+    <AppTabs.Navigator
+      screenOptions={{
+        tabBarActiveTintColor: ADMIN_THEME.accent,
+        tabBarInactiveTintColor: ADMIN_THEME.textSecondary,
+        headerShown: false,
+        tabBarStyle: {
+          backgroundColor: ADMIN_THEME.background,
+          borderTopWidth: 0,
+          height: 70,
+          paddingTop: 8,
+          paddingBottom: 8,
+        },
+        tabBarLabelStyle: { fontSize: 10, fontWeight: '600', letterSpacing: 1.5 },
+      }}
+    >
+      <AppTabs.Screen
+        name="Admin"
+        component={AdminScreen}
+        options={{
+          title: 'COMMAND',
+          tabBarIcon: ({ color, size }) => (
+            <View style={{ alignItems: 'center', justifyContent: 'center', width: 40, height: 32, borderRadius: 8, backgroundColor: color + '15' }}>
+              <Icon name="hexagon" size={size - 2} color={color} />
+            </View>
+          ),
+        }}
+      />
+      <AppTabs.Screen
+        name="Notifications"
+        component={AdminNotificationsScreen}
+        options={{
+          title: 'ALERTS',
+          tabBarIcon: ({ color, size }) => (
+            <NotificationTabIcon
+              color={color}
+              size={size}
+              showDot={unreadCount > 0}
+              backgroundColor={color + '15'}
+            />
+          ),
+        }}
+      />
+      <AppTabs.Screen
+        name="Profile"
+        component={AdminProfileScreen}
+        options={{
+          title: 'PROFILE',
+          tabBarIcon: ({ color, size }) => (
+            <View style={{ alignItems: 'center', justifyContent: 'center', width: 40, height: 32, borderRadius: 8, backgroundColor: color + '15' }}>
+              <Icon name="user" size={size - 2} color={color} />
+            </View>
+          ),
+        }}
+      />
+    </AppTabs.Navigator>
+  );
+};
 
 const UserNavigator = () => {
   const filterCategory = useEventsStore(state => state.filterCategory);
+  const activeDetailCategory = useEventsStore(state => state.activeDetailCategory);
   const unreadCount = useNotificationStore(state => state.unreadCount);
   const isTech = filterCategory === 'tech';
   const isCorporate = filterCategory === 'corporate';
@@ -139,7 +190,7 @@ const UserNavigator = () => {
   const isHealth = filterCategory === 'health';
   const isOther = filterCategory === 'other' || filterCategory === 'all';
   const activeCategory = (filterCategory === 'all' ? 'other' : filterCategory) as EventCategory;
-  const theme = categoryThemes[activeCategory];
+  const theme = activeDetailCategory ? categoryThemes[activeDetailCategory] : categoryThemes[activeCategory];
 
   const getTabBarStyle = () => ({
     backgroundColor: theme.background,
@@ -225,7 +276,12 @@ const UserNavigator = () => {
         component={NotificationsScreen} 
         options={{ 
           title: isTech ? 'ALERTS' : isCorporate ? 'ALERTS' : isSocial ? '🔔' : isSports ? 'ALERTS' : isArts ? 'ALERTS' : isEducation ? 'ALERTS' : isHealth ? 'ALERTS' : isOther ? 'ALERTS' : 'Alerts',
-          tabBarIcon: ({ color, size }) => <Text style={{ fontSize: size * 0.7, color }}>{unreadCount > 0 ? '🔔' : '🔕'}</Text>,
+          tabBarIcon: ({ color, size }) => (
+            <View style={{ alignItems: 'center', justifyContent: 'center', width: 26, height: 24 }}>
+              <Icon name="bell" size={size - 1} color={color} />
+              {unreadCount > 0 ? <View style={styles.notificationDot} /> : null}
+            </View>
+          ),
         }} 
       />
       <AppTabs.Screen 
@@ -241,7 +297,27 @@ const UserNavigator = () => {
 
 const AppNavigator = () => {
   const { user } = useAuthStore();
+  const setUnreadCount = useNotificationStore((state) => state.setUnreadCount);
   const isAdmin = user?.role === 'admin';
+
+  const { data: unreadCountData } = useQuery({
+    queryKey: ['notifications_unread_count'],
+    enabled: !!user,
+    queryFn: async () => {
+      const res = await apiClient.get('/notifications/unread-count');
+      return res.data?.data?.count as number;
+    },
+    refetchInterval: 15000,
+    refetchIntervalInBackground: true,
+    staleTime: 5000,
+  });
+
+  useEffect(() => {
+    if (typeof unreadCountData === 'number') {
+      setUnreadCount(unreadCountData);
+    }
+  }, [unreadCountData, setUnreadCount]);
+
   return isAdmin ? <AdminNavigator /> : <UserNavigator />;
 };
 
@@ -282,11 +358,23 @@ export const RootNavigator = () => {
           <RootStack.Screen name="Auth" component={AuthNavigator} />
         )}
       </RootStack.Navigator>
+      <GlobalThemedAlertHost />
     </NavigationContainer>
   );
 };
 
 const styles = StyleSheet.create({
+  notificationDot: {
+    position: 'absolute',
+    top: 3,
+    right: 5,
+    width: 9,
+    height: 9,
+    borderRadius: 5,
+    backgroundColor: '#EF4444',
+    borderWidth: 1,
+    borderColor: '#FFFFFF',
+  },
   techIconContainer: {
     shadowColor: '#00F0FF',
     shadowOffset: { width: 0, height: 0 },

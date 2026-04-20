@@ -35,7 +35,7 @@ export default function ProfileScreen({ adminTheme }: Props) {
   const styles = isAdmin ? adminStyles : defaultStyles;
 
   return (
-    <View style={[styles.container, { backgroundColor: isAdmin ? theme.background : undefined }]}>
+    <View style={[styles.container, { backgroundColor: theme.background }]}>
       <View style={styles.header}>
         {isAdmin && <View style={{ width: 40, height: 40, borderRadius: 20, borderWidth: 2, borderColor: theme.accent, alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
           <Text style={{ fontSize: 18, color: theme.accent }}>A</Text>

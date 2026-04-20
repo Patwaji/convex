@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigation } from '@react-navigation/native';
-import { StackNavigationProp } from '@react-navigation/stack';
+import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import FastImage from 'react-native-fast-image';
 import { format } from 'date-fns';
 
@@ -10,13 +10,14 @@ import { apiClient } from '../../../shared/api/client';
 import { useEventsStore } from '../store/eventsStore';
 import { getStylesForCategory, categoryThemes } from '../../../shared/theme/categoryThemes';
 import { EventCategory } from '../types';
-import { EventsStackParamList } from '../../../navigation/types';
+import { AppTabsParamList } from '../../../navigation/types';
 
-type MyEventsNavigationProp = StackNavigationProp<EventsStackParamList>;
+type MyEventsNavigationProp = BottomTabNavigationProp<AppTabsParamList, 'MyEvents'>;
 
 export default function MyEventsScreen() {
   const navigation = useNavigation<MyEventsNavigationProp>();
   const filterCategory = useEventsStore(state => state.filterCategory);
+  const setActiveDetailCategory = useEventsStore(state => state.setActiveDetailCategory);
   const activeCategory = (filterCategory === 'all' ? 'other' : filterCategory) as EventCategory;
   const categoryStyles = getStylesForCategory(activeCategory);
   const theme = categoryThemes[activeCategory];
@@ -24,7 +25,7 @@ export default function MyEventsScreen() {
   const { data: events, isLoading } = useQuery({
     queryKey: ['my-events'],
     queryFn: async () => {
-      const res = await apiClient.get('/events/me');
+      const res = await apiClient.get('/events/mine');
       return res.data.data;
     },
   });
@@ -37,7 +38,13 @@ export default function MyEventsScreen() {
     return (
       <TouchableOpacity
         style={[styles.card, eventStyles.card]}
-        onPress={() => navigation.navigate('EventDetail', { id: item._id, category: eventCategory })}
+        onPress={() => {
+          setActiveDetailCategory(eventCategory);
+          navigation.navigate('EventsTab', {
+            screen: 'EventDetail',
+            params: { id: item._id, category: eventCategory },
+          });
+        }}
       >
         <FastImage
           style={styles.cardImage}
@@ -56,7 +63,7 @@ export default function MyEventsScreen() {
             {format(new Date(item.date), 'MMM d, yyyy • h:mm a')}
           </Text>
           <Text style={[styles.cardVenue, { color: eventTheme.textSecondary }]} numberOfLines={1}>
-            📍 {item.venue?.name}
+            📍 {item.venue?.address || item.venue?.city}
           </Text>
         </View>
       </TouchableOpacity>

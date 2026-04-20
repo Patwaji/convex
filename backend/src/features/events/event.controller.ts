@@ -14,7 +14,6 @@ const createEventSchema = z.object({
   date: z.string().datetime({ offset: true }).or(z.string().min(1)),
   endDate: z.string().datetime({ offset: true }).optional(),
   venue: z.object({
-    name: z.string().min(1),
     address: z.string().min(1),
     city: z.string().min(1),
     location: z.object({
@@ -28,6 +27,21 @@ const createEventSchema = z.object({
   isFree: z.boolean().optional().default(true),
   ticketPrice: z.number().min(0).optional(),
   maxAttendees: z.number().min(1).optional(),
+}).superRefine((data, ctx) => {
+  if (!data.endDate) return;
+
+  const start = new Date(data.date);
+  const end = new Date(data.endDate);
+
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return;
+
+  if (end <= start) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['endDate'],
+      message: 'endDate must be greater than date',
+    });
+  }
 });
 
 const nearbySchema = z.object({
@@ -86,4 +100,10 @@ export async function getNearbyEvents(req: Request, res: Response): Promise<void
   const params = nearbySchema.parse(req.query);
   const events = await eventService.getNearbyEvents(params);
   ApiResponse.success(res, events);
+}
+
+export async function reportEvent(req: Request, res: Response): Promise<void> {
+  const reason = typeof req.body?.reason === 'string' ? req.body.reason : undefined;
+  await eventService.reportEvent(req.params.id!, req.user!._id.toString(), reason);
+  ApiResponse.success(res, null, 'Event reported successfully');
 }

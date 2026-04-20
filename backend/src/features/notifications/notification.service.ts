@@ -9,7 +9,7 @@ export async function createNotification(
   type: NotificationType,
   title: string,
   message: string,
-  data?: { eventId?: string; eventTitle?: string; flagReason?: string }
+  data?: { eventId?: string; eventTitle?: string; flagReason?: string; adminNote?: string }
 ): Promise<INotification> {
   const notification = await Notification.create({
     user: new mongoose.Types.ObjectId(userId),
@@ -19,6 +19,37 @@ export async function createNotification(
     data,
   });
   return notification;
+}
+
+export async function notifyAdminRequestedMoreProof(
+  userId: string,
+  eventId: string,
+  eventTitle: string,
+  adminNote?: string
+): Promise<INotification> {
+  return createNotification(
+    userId,
+    'event_flagged_info_request',
+    '📋 More Proof Requested by Admin',
+    adminNote
+      ? `Admin requested more proof for "${eventTitle}". Note: ${adminNote}`
+      : `Admin requested more proof for "${eventTitle}". Please submit additional information.`,
+    { eventId, eventTitle, adminNote }
+  );
+}
+
+export async function notifyEventInfoSubmitted(
+  adminUserId: string,
+  eventId: string,
+  eventTitle: string
+): Promise<INotification> {
+  return createNotification(
+    adminUserId,
+    'event_info_submitted',
+    '📝 Additional Proof Submitted',
+    `Organizer submitted additional proof for "${eventTitle}". Please review.`,
+    { eventId, eventTitle }
+  );
 }
 
 /**

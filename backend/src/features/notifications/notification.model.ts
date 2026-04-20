@@ -17,6 +17,7 @@ export interface INotification extends Document {
     eventId?: string;
     eventTitle?: string;
     flagReason?: string;
+    adminNote?: string;
   };
   read: boolean;
   createdAt: Date;
@@ -53,6 +54,7 @@ const notificationSchema = new Schema<INotification>(
       eventId: String,
       eventTitle: String,
       flagReason: String,
+      adminNote: String,
     },
     read: {
       type: Boolean,

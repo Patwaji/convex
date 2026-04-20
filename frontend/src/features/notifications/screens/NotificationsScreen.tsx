@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import Icon from 'react-native-vector-icons/Feather';
 import { formatDistanceToNow } from 'date-fns';
+import { useNavigation } from '@react-navigation/native';
 
 import { apiClient } from '../../../shared/api/client';
 import { useEventsStore } from '../../events/store/eventsStore';
@@ -21,6 +22,7 @@ interface Props {
 
 export default function NotificationsScreen({ adminTheme }: Props) {
   const queryClient = useQueryClient();
+  const navigation = useNavigation<any>();
   const filterCategory = useEventsStore(state => state.filterCategory);
   const activeCategory = (filterCategory === 'all' ? 'other' : filterCategory) as EventCategory;
   const categoryStyles = getStylesForCategory(activeCategory);
@@ -52,12 +54,29 @@ export default function NotificationsScreen({ adminTheme }: Props) {
         markAsRead(data.notifications.filter((n: Notification) => !n.read).map((n: Notification) => n._id));
       }
       queryClient.invalidateQueries({ queryKey: ['notifications'] });
+      queryClient.invalidateQueries({ queryKey: ['notifications_unread_count'] });
+    },
+  });
+
+  const markAllReadMutation = useMutation({
+    mutationFn: async () => apiClient.post('/notifications/mark-read', {}),
+    onSuccess: () => {
+      markAsRead();
+      queryClient.invalidateQueries({ queryKey: ['notifications'] });
+      queryClient.invalidateQueries({ queryKey: ['notifications_unread_count'] });
     },
   });
 
   const handleNotificationPress = (notification: Notification) => {
     if (!notification.read) {
       markReadMutation.mutate([notification._id]);
+    }
+
+    if (!isAdmin && notification.type === 'event_flagged_info_request' && notification.data?.eventId) {
+      navigation.navigate('EventsTab', {
+        screen: 'SubmitAdditionalInfo',
+        params: { eventId: notification.data.eventId },
+      });
     }
   };
 
@@ -114,10 +133,26 @@ export default function NotificationsScreen({ adminTheme }: Props) {
               {isAdmin ? 'ALERTS' : 'Notifications'}
             </Text>
           </View>
-          {unreadCount > 0 && (
-            <View style={[styles.badge, { backgroundColor: isAdmin ? theme.accent : theme.accent }]}>
-              <Text style={[styles.badgeText, { color: theme.accentText }]}>{unreadCount}</Text>
-            </View>
+          <View style={styles.headerActions}>
+            {unreadCount > 0 && (
+              <TouchableOpacity
+                style={[styles.markAllButton, { borderColor: theme.accent }]}
+                onPress={() => markAllReadMutation.mutate()}
+                disabled={markAllReadMutation.isPending}
+              >
+                <Text style={[styles.markAllButtonText, { color: theme.accent }]}>
+                  {markAllReadMutation.isPending ? 'Marking...' : 'Mark all as read'}
+                </Text>
+              </TouchableOpacity>
+            )}
+            {unreadCount > 0 && (
+              <View style={[styles.badge, { backgroundColor: isAdmin ? theme.accent : theme.accent }]}>
+                <Text style={[styles.badgeText, { color: theme.accentText }]}>{unreadCount}</Text>
+              </View>
+            )}
+          </View>
+          {unreadCount <= 0 && (
+            <View style={styles.headerActions} />
           )}
         </View>
       </View>
@@ -156,7 +191,10 @@ const defaultStyles = StyleSheet.create({
   container: { flex: 1 },
   header: { padding: 24, paddingTop: 60, paddingBottom: 16 },
   headerTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   title: { fontSize: 32, fontWeight: '800' },
+  markAllButton: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6 },
+  markAllButtonText: { fontSize: 11, fontWeight: '700' },
   badge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
   badgeText: { fontSize: 12, fontWeight: '700' },
   loader: { marginTop: 50 },
@@ -184,7 +222,10 @@ const adminStyles = StyleSheet.create({
   container: { flex: 1 },
   header: { padding: 20, paddingTop: 50, paddingBottom: 12 },
   headerTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   title: { fontSize: 18, fontWeight: '700', letterSpacing: 1 },
+  markAllButton: { borderWidth: 1, borderRadius: 999, borderColor: '#00F0FF60', paddingHorizontal: 10, paddingVertical: 5, backgroundColor: '#00F0FF12' },
+  markAllButtonText: { fontSize: 10, fontWeight: '700', color: '#00F0FF', letterSpacing: 0.5 },
   badge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, borderWidth: 1, borderColor: '#00F0FF40' },
   badgeText: { fontSize: 11, fontWeight: '600', color: '#00F0FF' },
   loader: { marginTop: 50 },

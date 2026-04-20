@@ -5,27 +5,38 @@ export interface Event {
   title: string;
   description: string;
   category: EventCategory;
+  tags?: string[];
   date: string;
+  endDate?: string;
   venue: {
-    name: string;
     address: string;
     city: string;
-    coordinates: {
-      latitude: number;
-      longitude: number;
+    location?: {
+      type: 'Point';
+      coordinates: [number, number];
     };
   };
   organizer: {
     _id: string;
     name: string;
     avatar?: string;
+    email?: string;
   };
   coverImage?: string;
   ticketPrice: number;
   isFree: boolean;
-  status: 'pending' | 'approved' | 'rejected' | 'cancelled';
-  capacity?: number;
+  status: 'pending' | 'approved' | 'rejected';
+  maxAttendees?: number;
   attendeeCount: number;
+  attendees?: Array<{
+    _id: string;
+    name?: string;
+    avatar?: string;
+  }>;
+  reportCount?: number;
+  isFlagged?: boolean;
+  flagReason?: string;
+  rejectionNote?: string;
   createdAt: string;
   updatedAt: string;
 }

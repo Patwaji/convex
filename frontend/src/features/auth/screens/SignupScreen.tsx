@@ -1,17 +1,21 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, KeyboardAvoidingView, Platform, TouchableOpacity, Alert, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, KeyboardAvoidingView, Platform, TouchableOpacity, ScrollView, StatusBar } from 'react-native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { AuthStackParamList } from '../../../navigation/types';
 import { AuthInput } from '../components/AuthInput';
 import { PrimaryButton } from '../../../shared/components/PrimaryButton';
 import { useAuthStore } from '../store/authStore';
 import { apiClient } from '../../../shared/api/client';
+import { triggerGlobalAlert } from '../../../shared/store/globalAlertStore';
+import { categoryThemes } from '../../../shared/theme/categoryThemes';
 
 type SignupScreenNavigationProp = StackNavigationProp<AuthStackParamList, 'Signup'>;
 
 interface Props {
   navigation: SignupScreenNavigationProp;
 }
+
+const THEME = categoryThemes.other;
 
 export default function SignupScreen({ navigation }: Props) {
   const [name, setName] = useState('');
@@ -23,7 +27,11 @@ export default function SignupScreen({ navigation }: Props) {
 
   const handleSignup = async () => {
     if (!name || !email || !password) {
-      Alert.alert('Error', 'Please fill in all fields');
+      triggerGlobalAlert({
+        type: 'warning',
+        title: 'ERROR',
+        message: 'Please fill in all fields',
+      });
       return;
     }
 
@@ -33,10 +41,11 @@ export default function SignupScreen({ navigation }: Props) {
       const { user, accessToken, refreshToken } = response.data.data;
       await login(user, accessToken, refreshToken);
     } catch (error: any) {
-      Alert.alert(
-        'Sign Up Failed', 
-        error.response?.data?.error?.message || 'Something went wrong. Please try again.'
-      );
+      triggerGlobalAlert({
+        type: 'error',
+        title: 'SIGN UP FAILED',
+        message: error.response?.data?.error?.message || 'Something went wrong. Please try again.',
+      });
     } finally {
       setIsLoading(false);
     }
@@ -44,13 +53,14 @@ export default function SignupScreen({ navigation }: Props) {
 
   return (
     <KeyboardAvoidingView 
-      style={styles.container}
+      style={[styles.container, { backgroundColor: THEME.background }]}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
+      <StatusBar barStyle="dark-content" backgroundColor={THEME.background} />
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.header}>
-          <Text style={styles.title}>Join Convex</Text>
-          <Text style={styles.subtitle}>Create an account to start discovering events.</Text>
+          <Text style={[styles.title, { color: THEME.textPrimary }]}>Join Convex</Text>
+          <Text style={[styles.subtitle, { color: THEME.textSecondary }]}>Create an account to start discovering events.</Text>
         </View>
 
         <View style={styles.form}>
@@ -60,6 +70,7 @@ export default function SignupScreen({ navigation }: Props) {
             autoCapitalize="words"
             value={name}
             onChangeText={setName}
+            theme={THEME}
           />
           <AuthInput
             label="Email"
@@ -68,6 +79,7 @@ export default function SignupScreen({ navigation }: Props) {
             autoCapitalize="none"
             value={email}
             onChangeText={setEmail}
+            theme={THEME}
           />
           <AuthInput
             label="Password"
@@ -75,6 +87,7 @@ export default function SignupScreen({ navigation }: Props) {
             secureTextEntry
             value={password}
             onChangeText={setPassword}
+            theme={THEME}
           />
           
           <PrimaryButton 
@@ -82,13 +95,14 @@ export default function SignupScreen({ navigation }: Props) {
             onPress={handleSignup} 
             isLoading={isLoading} 
             style={styles.button}
+            theme={THEME}
           />
         </View>
 
         <View style={styles.footer}>
-          <Text style={styles.footerText}>Already have an account? </Text>
+          <Text style={[styles.footerText, { color: THEME.textSecondary }]}>Already have an account? </Text>
           <TouchableOpacity onPress={() => navigation.goBack()}>
-            <Text style={styles.link}>Log In</Text>
+            <Text style={[styles.link, { color: THEME.accent }]}>Log In</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -99,7 +113,6 @@ export default function SignupScreen({ navigation }: Props) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
   },
   scrollContent: {
     flexGrow: 1,
@@ -112,13 +125,11 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 40,
     fontWeight: '800',
-    color: '#0F172A',
     marginBottom: 12,
     letterSpacing: -1,
   },
   subtitle: {
     fontSize: 16,
-    color: '#64748B',
     lineHeight: 24,
   },
   form: {
@@ -134,11 +145,9 @@ const styles = StyleSheet.create({
     paddingBottom: 20,
   },
   footerText: {
-    color: '#64748B',
     fontSize: 15,
   },
   link: {
-    color: '#6366F1',
     fontWeight: '700',
     fontSize: 15,
   },

@@ -50,46 +50,28 @@ function shouldAutoFlag(event: any): { flagged: boolean; reason?: string } {
   return { flagged: false };
 }
 
-// ─── POST /api/events/:id/report ──────────────────────────────
-router.post(
-  '/events/:id/report',
-  asyncWrapper(async (req: Request, res: Response) => {
-    const { reason } = req.body;
-    const eventId = req.params.id;
-    
-    const event = await Event.findById(eventId);
-    if (!event) {
-      ApiResponse.error(res, 404, 'EVENT_NOT_FOUND', 'Event not found');
-      return;
-    }
-
-    // Add report
-    event.reports.push({
-      reporter: req.user!._id,
-      reason: reason || 'Reported by user',
-      createdAt: new Date(),
-    });
-    event.reportCount = event.reports.length;
-
-    // Auto-flag if 3+ reports
-    if (event.reportCount >= 3 && !event.isFlagged) {
-      event.isFlagged = true;
-      event.flagReason = 'Multiple user reports';
-    }
-
-    await event.save();
-    ApiResponse.success(res, null, 'Event reported successfully');
-  })
-);
+function getPagination(req: Request) {
+  const page = Math.max(1, parseInt(req.query.page as string, 10) || 1);
+  const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string, 10) || 20));
+  return { page, limit, skip: (page - 1) * limit };
+}
 
 // ─── GET /api/admin/events/pending ──────────────────────────
 router.get(
   '/events/pending',
-  asyncWrapper(async (_req: Request, res: Response) => {
-    const events = await Event.find({ status: 'pending' })
+  asyncWrapper(async (req: Request, res: Response) => {
+    const { page, limit, skip } = getPagination(req);
+    const filter = { status: 'pending' };
+
+    const [events, total] = await Promise.all([
+      Event.find(filter)
       .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
       .populate('organizer', 'name email avatar')
-      .lean();
+      .lean(),
+      Event.countDocuments(filter),
+    ]);
 
     // Add flag info for each event
     const eventsWithFlagInfo = await Promise.all(
@@ -99,54 +81,127 @@ router.get(
       })
     );
 
-    ApiResponse.success(res, eventsWithFlagInfo);
+    ApiResponse.paginated(res, eventsWithFlagInfo, {
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit),
+    });
   })
 );
 
 // ─── GET /api/admin/events/approved ──────────────────────────
 router.get(
   '/events/approved',
-  asyncWrapper(async (_req: Request, res: Response) => {
-    const events = await Event.find({ status: 'approved' })
+  asyncWrapper(async (req: Request, res: Response) => {
+    const { page, limit, skip } = getPagination(req);
+    const filter = { status: 'approved' };
+
+    const [events, total] = await Promise.all([
+      Event.find(filter)
       .sort({ updatedAt: -1 })
+      .skip(skip)
+      .limit(limit)
       .populate('organizer', 'name email avatar')
-      .limit(50)
-      .lean();
-    ApiResponse.success(res, events);
+      .lean(),
+      Event.countDocuments(filter),
+    ]);
+
+    ApiResponse.paginated(res, events, {
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit),
+    });
   })
 );
 
 // ─── GET /api/admin/events/rejected ──────────────────────────
 router.get(
   '/events/rejected',
-  asyncWrapper(async (_req: Request, res: Response) => {
-    const events = await Event.find({ status: 'rejected' })
+  asyncWrapper(async (req: Request, res: Response) => {
+    const { page, limit, skip } = getPagination(req);
+    const filter = { status: 'rejected' };
+
+    const [events, total] = await Promise.all([
+      Event.find(filter)
       .sort({ updatedAt: -1 })
+      .skip(skip)
+      .limit(limit)
       .populate('organizer', 'name email avatar')
-      .limit(50)
-      .lean();
-    ApiResponse.success(res, events);
+      .lean(),
+      Event.countDocuments(filter),
+    ]);
+
+    ApiResponse.paginated(res, events, {
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit),
+    });
   })
 );
 
 // ─── GET /api/admin/events/flagged ───────────────────────────
 router.get(
   '/events/flagged',
-  asyncWrapper(async (_req: Request, res: Response) => {
-    const events = await Event.find({ 
+  asyncWrapper(async (req: Request, res: Response) => {
+    const { page, limit, skip } = getPagination(req);
+    const filter = {
       $or: [
         { isFlagged: true },
-        { status: 'pending', reportCount: { $gte: 1 } }
-      ]
-    })
+        { status: 'pending', reportCount: { $gte: 1 } },
+      ],
+    };
+
+    const [events, total] = await Promise.all([
+      Event.find(filter)
       .sort({ updatedAt: -1 })
+      .skip(skip)
+      .limit(limit)
       .populate('organizer', 'name email avatar')
-      .lean();
-    ApiResponse.success(res, events);
+      .lean(),
+      Event.countDocuments(filter),
+    ]);
+
+    ApiResponse.paginated(res, events, {
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit),
+    });
   })
 );
 
 // ─── PATCH /api/admin/events/:id/approve ────────────────────
+router.patch(
+  '/events/:id/request-proof',
+  asyncWrapper(async (req: Request, res: Response) => {
+    const event = await Event.findById(req.params.id);
+    if (!event) {
+      ApiResponse.error(res, 404, 'EVENT_NOT_FOUND', 'Event not found');
+      return;
+    }
+
+    const adminNote = typeof req.body?.note === 'string' ? req.body.note.trim() : undefined;
+    event.isFlagged = true;
+    event.flagReason = adminNote || 'Additional proof requested by admin';
+    if (event.status !== 'pending') {
+      event.status = 'pending';
+    }
+    await event.save();
+
+    await notificationService.notifyAdminRequestedMoreProof(
+      event.organizer.toString(),
+      event._id.toString(),
+      event.title,
+      adminNote
+    );
+
+    ApiResponse.success(res, event, 'Additional proof request sent to organizer');
+  })
+);
+
 router.patch(
   '/events/:id/approve',
   asyncWrapper(async (req: Request, res: Response) => {

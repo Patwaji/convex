@@ -1,10 +1,13 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, TextInput, FlatList, Dimensions } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, TextInput, Dimensions, ActivityIndicator, Modal } from 'react-native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import * as ImagePicker from 'react-native-image-picker';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
+import { format } from 'date-fns';
 import Icon from 'react-native-vector-icons/Feather';
 import FastImage from 'react-native-fast-image';
+import { WebView, WebViewMessageEvent } from 'react-native-webview';
 
 import { EventsStackParamList } from '../../../navigation/types';
 import { apiClient } from '../../../shared/api/client';
@@ -15,15 +18,23 @@ import ThemedAlert from '../../../shared/components/ThemedAlert';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-// Indian cities for autocomplete
-const INDIAN_CITIES = [
-  'Mumbai', 'Delhi', 'Bangalore', 'Hyderabad', 'Chennai', 'Kolkata', 'Pune', 'Ahmedabad', 'Jaipur', 'Lucknow',
-  'Surat', 'Kanpur', 'Nagpur', 'Indore', 'Thane', 'Bhopal', 'Visakhapatnam', 'Vadodara', 'Ghaziabad', 'Ludhiana',
-  'Coimbatore', 'Kochi', 'Patna', 'Rajkot', 'Meerut', 'Varanasi', 'Srinagar', 'Jodhpur', 'Ranchi', 'Chandigarh',
-  'Mysore', 'Gwalior', 'Madurai', 'Jabalpur', 'Nashik', 'Faridabad', 'Allahabad', 'Hubli', 'Dhanbad', 'Amritsar',
-  'Warangal', 'Guntur', 'Bhubaneswar', 'Belgaum', 'Sangli', 'Jamshedpur', 'Kolhapur', 'Navi Mumbai', 'Ulhasnagar',
-  'Solapur', 'Tiruchirappalli', 'Bareilly', 'Aligarh', 'Bikaner', 'Noida', 'Firozabad', 'Moradabad', 'Jalandhar',
-];
+type AddressSuggestion = {
+  displayName: string;
+  address: string;
+  city: string;
+  lat: number;
+  lng: number;
+};
+
+const SEARCH_HEADERS: Record<string, string> = {
+  'Accept-Language': 'en',
+  'User-Agent': 'ConvexApp/1.0',
+};
+
+type Coordinate = {
+  latitude: number;
+  longitude: number;
+};
 
 type CreateEventScreenNavigationProp = StackNavigationProp<EventsStackParamList, 'CreateEvent'>;
 
@@ -32,8 +43,8 @@ interface Props {
 }
 
 export default function CreateEventScreen({ navigation }: Props) {
-  const filterCategory = useEventsStore(state => state.filterCategory);
-  const initialCategory = filterCategory === 'all' ? 'other' : filterCategory;
+  const storeFilterCategory = useEventsStore.getState().filterCategory;
+  const initialCategory = storeFilterCategory === 'all' ? 'other' : storeFilterCategory;
   
   const [category, setCategory] = useState<string>(initialCategory);
   
@@ -43,49 +54,397 @@ export default function CreateEventScreen({ navigation }: Props) {
   
   const getFieldLabel = (field: string): string => {
     const labels: Record<string, Record<string, string>> = {
-      tech: { title: 'Project Name', description: 'Technical Brief', venueName: 'Lab Location', venueAddress: 'Lab Address', city: 'Tech Hub', image: 'Upload Blueprint', submit: 'Initialize', date: 'Date & Time' },
-      corporate: { title: 'Event Title', description: 'Business Brief', venueName: 'Conference Room', venueAddress: 'Office Address', city: 'Business District', image: 'Company Logo', submit: 'Submit Proposal', date: 'Date & Time' },
-      social: { title: 'Event Name', description: 'What\'s the vibe?', venueName: 'Party Spot', venueAddress: 'Location', city: 'Where at?', image: 'Add Photo', submit: 'Let\'s Go!', date: 'When?' },
-      sports: { title: 'Match Title', description: 'Event Details', venueName: 'Arena / Field', venueAddress: 'Venue Address', city: 'City', image: 'Team Logo', submit: 'Game On', date: 'Match Time' },
-      arts: { title: 'Artwork Title', description: 'About the Piece', venueName: 'Gallery / Venue', venueAddress: 'Location', city: 'City', image: 'Upload Artwork', submit: 'Exhibit', date: 'Exhibition Date' },
-      education: { title: 'Course Title', description: 'Course Details', venueName: 'Institute', venueAddress: 'Address', city: 'Campus', image: 'Course Image', submit: 'Start Course', date: 'Start Date' },
-      health: { title: 'Session Name', description: 'Session Details', venueName: 'Wellness Center', venueAddress: 'Studio Address', city: 'Location', image: 'Add Image', submit: 'Join Session', date: 'Session Time' },
-      other: { title: 'Event Title', description: 'Description', venueName: 'Venue Name', venueAddress: 'Address', city: 'City', image: 'Add Cover Image', submit: 'Submit', date: 'Date & Time' },
+      tech: { title: 'Project Name', description: 'Technical Brief', venueAddress: 'Lab Address', city: 'Tech Hub', image: 'Upload Blueprint', submit: 'Initialize', date: 'Date & Time' },
+      corporate: { title: 'Event Title', description: 'Business Brief', venueAddress: 'Office Address', city: 'Business District', image: 'Company Logo', submit: 'Submit Proposal', date: 'Date & Time' },
+      social: { title: 'Event Name', description: 'What\'s the vibe?', venueAddress: 'Location', city: 'Where at?', image: 'Add Photo', submit: 'Let\'s Go!', date: 'When?' },
+      sports: { title: 'Match Title', description: 'Event Details', venueAddress: 'Venue Address', city: 'City', image: 'Team Logo', submit: 'Game On', date: 'Match Time' },
+      arts: { title: 'Artwork Title', description: 'About the Piece', venueAddress: 'Location', city: 'City', image: 'Upload Artwork', submit: 'Exhibit', date: 'Exhibition Date' },
+      education: { title: 'Course Title', description: 'Course Details', venueAddress: 'Address', city: 'Campus', image: 'Course Image', submit: 'Start Course', date: 'Start Date' },
+      health: { title: 'Session Name', description: 'Session Details', venueAddress: 'Studio Address', city: 'Location', image: 'Add Image', submit: 'Join Session', date: 'Session Time' },
+      other: { title: 'Event Title', description: 'Description', venueAddress: 'Address', city: 'City', image: 'Add Cover Image', submit: 'Submit', date: 'Date & Time' },
     };
     return labels[category]?.[field] || labels.other[field];
   };
   
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [dateStr, setDateStr] = useState('');
+  const [eventDateTime, setEventDateTime] = useState<Date>(new Date(Date.now() + 86400000));
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showTimePicker, setShowTimePicker] = useState(false);
   const [isFree, setIsFree] = useState(true);
   const [ticketPrice, setTicketPrice] = useState('');
-  const [venueName, setVenueName] = useState('');
-  const [venueAddress, setVenueAddress] = useState('');
-  const [city, setCity] = useState('');
-  const [citySuggestions, setCitySuggestions] = useState<string[]>([]);
-  const [showCityDropdown, setShowCityDropdown] = useState(false);
+  const [addressQuery, setAddressQuery] = useState('');
+  const [addressSuggestions, setAddressSuggestions] = useState<AddressSuggestion[]>([]);
+  const [showAddressDropdown, setShowAddressDropdown] = useState(false);
+  const [addressNoResults, setAddressNoResults] = useState(false);
+  const [selectedAddress, setSelectedAddress] = useState<AddressSuggestion | null>(null);
+  const [isSearchingAddress, setIsSearchingAddress] = useState(false);
+  const [showMapPicker, setShowMapPicker] = useState(false);
+  const [mapPin, setMapPin] = useState<Coordinate | null>(null);
+  const [isResolvingMapAddress, setIsResolvingMapAddress] = useState(false);
+  const [mapCenter, setMapCenter] = useState<Coordinate>({
+    latitude: 20.5937,
+    longitude: 78.9629,
+  });
+  const [mapSearchQuery, setMapSearchQuery] = useState('');
+  const [mapSearchResults, setMapSearchResults] = useState<AddressSuggestion[]>([]);
+  const [showMapSearchDropdown, setShowMapSearchDropdown] = useState(false);
+  const [mapSearchNoResults, setMapSearchNoResults] = useState(false);
+  const [isSearchingMap, setIsSearchingMap] = useState(false);
+  const [mapWebViewNonce, setMapWebViewNonce] = useState(0);
+  const [mapPickedSuggestion, setMapPickedSuggestion] = useState<AddressSuggestion | null>(null);
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [alertState, setAlertState] = useState<{ visible: boolean; type: 'success' | 'error' | 'warning' | 'info'; title: string; message: string; confirmText?: string; onConfirm?: () => void }>({ visible: false, type: 'info', title: '', message: '' });
+  const addressSearchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const mapSearchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const queryClient = useQueryClient();
 
-  const handleCityChange = (text: string) => {
-    setCity(text);
-    if (text.length > 0) {
-      const filtered = INDIAN_CITIES.filter(c => c.toLowerCase().includes(text.toLowerCase())).slice(0, 6);
-      setCitySuggestions(filtered);
-      setShowCityDropdown(filtered.length > 0);
-    } else {
-      setCitySuggestions([]);
-      setShowCityDropdown(false);
+  const extractCity = (address: any): string => {
+    return (
+      address?.city ||
+      address?.town ||
+      address?.village ||
+      address?.county ||
+      address?.state_district ||
+      ''
+    );
+  };
+
+  const mergeAndUniqueSuggestions = (items: AddressSuggestion[]) => {
+    const seen = new Set<string>();
+    const unique: AddressSuggestion[] = [];
+
+    for (const item of items) {
+      const key = `${item.address.toLowerCase()}|${item.lat.toFixed(5)}|${item.lng.toFixed(5)}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      unique.push(item);
+    }
+
+    return unique;
+  };
+
+  const fetchPlaceSuggestions = async (query: string, limit: number): Promise<AddressSuggestion[]> => {
+    const photonUrl = `https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&limit=${limit}`;
+    const nominatimUrl = `https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&limit=${limit}&q=${encodeURIComponent(query)}`;
+
+    let photonResults: AddressSuggestion[] = [];
+    try {
+      const photonResp = await fetch(photonUrl, { headers: SEARCH_HEADERS });
+      const photonData = await photonResp.json();
+      photonResults = Array.isArray(photonData?.features)
+        ? photonData.features
+            .map((f: any) => {
+              const props = f?.properties || {};
+              const coords = f?.geometry?.coordinates || [];
+              const lng = Number(coords[0]);
+              const lat = Number(coords[1]);
+              const city = props.city || props.county || props.state || '';
+              const name = props.name || '';
+              const street = props.street || '';
+              const houseNumber = props.housenumber || '';
+              const state = props.state || '';
+              const country = props.country || '';
+              const address = [name, [houseNumber, street].filter(Boolean).join(' '), city, state, country]
+                .filter(Boolean)
+                .join(', ');
+
+              return {
+                displayName: address,
+                address,
+                city,
+                lat,
+                lng,
+              } as AddressSuggestion;
+            })
+            .filter((item: AddressSuggestion) => item.address && !Number.isNaN(item.lat) && !Number.isNaN(item.lng))
+        : [];
+    } catch {
+      photonResults = [];
+    }
+
+    let nominatimResults: AddressSuggestion[] = [];
+    try {
+      const nominatimResp = await fetch(nominatimUrl, { headers: SEARCH_HEADERS });
+      const nominatimData = await nominatimResp.json();
+      nominatimResults = Array.isArray(nominatimData)
+        ? nominatimData
+            .map((item: any) => {
+              const cityName = extractCity(item.address);
+              return {
+                displayName: item.display_name || '',
+                address: item.display_name || '',
+                city: cityName,
+                lat: Number(item.lat),
+                lng: Number(item.lon),
+              };
+            })
+            .filter((item: AddressSuggestion) => item.address && !Number.isNaN(item.lat) && !Number.isNaN(item.lng))
+        : [];
+    } catch {
+      nominatimResults = [];
+    }
+
+    return mergeAndUniqueSuggestions([...photonResults, ...nominatimResults]).slice(0, limit);
+  };
+
+  useEffect(() => {
+    if (addressSearchTimerRef.current) {
+      clearTimeout(addressSearchTimerRef.current);
+    }
+
+    const query = addressQuery.trim();
+    if (query.length < 3) {
+      setAddressSuggestions([]);
+      setShowAddressDropdown(false);
+      setAddressNoResults(false);
+      setIsSearchingAddress(false);
+      return;
+    }
+
+    setIsSearchingAddress(true);
+    addressSearchTimerRef.current = setTimeout(async () => {
+      try {
+        const mapped = await fetchPlaceSuggestions(query, 8);
+        setAddressSuggestions(mapped);
+        setShowAddressDropdown(true);
+        setAddressNoResults(mapped.length === 0);
+      } catch {
+        setAddressSuggestions([]);
+        setShowAddressDropdown(true);
+        setAddressNoResults(true);
+      } finally {
+        setIsSearchingAddress(false);
+      }
+    }, 350);
+
+    return () => {
+      if (addressSearchTimerRef.current) {
+        clearTimeout(addressSearchTimerRef.current);
+      }
+    };
+  }, [addressQuery]);
+
+  const onAddressInputChange = (text: string) => {
+    setAddressQuery(text);
+    setSelectedAddress(null);
+    setAddressNoResults(false);
+  };
+
+  const selectAddress = (item: AddressSuggestion) => {
+    setSelectedAddress(item);
+    setAddressQuery(item.address);
+    setAddressSuggestions([]);
+    setShowAddressDropdown(false);
+    const pin = { latitude: item.lat, longitude: item.lng };
+    setMapPin(pin);
+    setMapCenter({
+      latitude: item.lat,
+      longitude: item.lng,
+    });
+  };
+
+  const getOpenStreetMapHtml = (center: Coordinate, pin: Coordinate | null) => {
+    const pinScript = pin
+      ? `L.marker([${pin.latitude}, ${pin.longitude}]).addTo(map);`
+      : '';
+
+    return `
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+      crossorigin=""
+    />
+    <style>
+      html, body, #map { height: 100%; width: 100%; margin: 0; padding: 0; }
+    </style>
+  </head>
+  <body>
+    <div id="map"></div>
+    <script
+      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+      crossorigin=""
+    ></script>
+    <script>
+      const map = L.map('map').setView([${center.latitude}, ${center.longitude}], 13);
+
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '&copy; OpenStreetMap contributors'
+      }).addTo(map);
+
+      ${pinScript}
+
+      let marker = null;
+
+      map.on('click', function (e) {
+        if (marker) {
+          map.removeLayer(marker);
+        }
+        marker = L.marker(e.latlng).addTo(map);
+        window.ReactNativeWebView.postMessage(
+          JSON.stringify({
+            type: 'pick',
+            latitude: e.latlng.lat,
+            longitude: e.latlng.lng,
+          })
+        );
+      });
+    </script>
+  </body>
+</html>`;
+  };
+
+  const onMapMessage = (event: WebViewMessageEvent) => {
+    try {
+      const payload = JSON.parse(event.nativeEvent.data || '{}');
+      if (payload.type !== 'pick') return;
+
+      const latitude = Number(payload.latitude);
+      const longitude = Number(payload.longitude);
+      if (Number.isNaN(latitude) || Number.isNaN(longitude)) return;
+
+      setMapPin({ latitude, longitude });
+      setMapCenter({ latitude, longitude });
+      setMapPickedSuggestion(null);
+    } catch {
+      // Ignore malformed bridge messages from web map.
     }
   };
 
-  const selectCity = (selectedCity: string) => {
-    setCity(selectedCity);
-    setShowCityDropdown(false);
-    setCitySuggestions([]);
+  useEffect(() => {
+    if (!showMapPicker) return;
+
+    if (mapSearchTimerRef.current) {
+      clearTimeout(mapSearchTimerRef.current);
+    }
+
+    const query = mapSearchQuery.trim();
+    if (query.length < 2) {
+      setMapSearchResults([]);
+      setShowMapSearchDropdown(false);
+      setMapSearchNoResults(false);
+      setIsSearchingMap(false);
+      return;
+    }
+
+    setIsSearchingMap(true);
+    mapSearchTimerRef.current = setTimeout(async () => {
+      try {
+        const mapped = await fetchPlaceSuggestions(query, 10);
+
+        setMapSearchResults(mapped);
+        setShowMapSearchDropdown(true);
+        setMapSearchNoResults(mapped.length === 0);
+      } catch {
+        setMapSearchResults([]);
+        setShowMapSearchDropdown(true);
+        setMapSearchNoResults(true);
+      } finally {
+        setIsSearchingMap(false);
+      }
+    }, 300);
+
+    return () => {
+      if (mapSearchTimerRef.current) {
+        clearTimeout(mapSearchTimerRef.current);
+      }
+    };
+  }, [mapSearchQuery, showMapPicker]);
+
+  const selectMapSearchResult = (item: AddressSuggestion) => {
+    setMapSearchQuery(item.address);
+    setShowMapSearchDropdown(false);
+    setMapSearchNoResults(false);
+    setMapSearchResults([]);
+    setMapCenter({ latitude: item.lat, longitude: item.lng });
+    setMapPin({ latitude: item.lat, longitude: item.lng });
+    setMapPickedSuggestion(item);
+    setMapWebViewNonce((n) => n + 1);
+  };
+
+  const confirmMapLocation = async () => {
+    if (!mapPin) {
+      setAlertState({
+        visible: true,
+        type: 'warning',
+        title: '◆ PIN REQUIRED',
+        message: 'Tap on the map to drop a pin first.',
+      });
+      return;
+    }
+
+    // If user selected from map search dropdown, trust that structured result
+    // and skip another network reverse-lookup to avoid intermittent failures.
+    if (mapPickedSuggestion) {
+      const mapped: AddressSuggestion = {
+        ...mapPickedSuggestion,
+        lat: mapPin.latitude,
+        lng: mapPin.longitude,
+      };
+      setSelectedAddress(mapped);
+      setAddressQuery(mapped.address);
+      setShowAddressDropdown(false);
+      setAddressSuggestions([]);
+      setShowMapPicker(false);
+      return;
+    }
+
+    try {
+      setIsResolvingMapAddress(true);
+      const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&addressdetails=1&lat=${mapPin.latitude}&lon=${mapPin.longitude}`;
+      const response = await fetch(url, { headers: SEARCH_HEADERS });
+      const data = await response.json();
+
+      if (!data?.display_name) {
+        if (selectedAddress) {
+          // Fallback to last known good address instead of hard failing.
+          const fallbackMapped: AddressSuggestion = {
+            ...selectedAddress,
+            lat: mapPin.latitude,
+            lng: mapPin.longitude,
+          };
+          setSelectedAddress(fallbackMapped);
+          setAddressQuery(fallbackMapped.address);
+          setShowMapPicker(false);
+          return;
+        }
+        throw new Error('No address found for selected pin');
+      }
+
+      const cityName = extractCity(data.address);
+      const mapped: AddressSuggestion = {
+        displayName: data.display_name,
+        address: data.display_name,
+        city: cityName,
+        lat: mapPin.latitude,
+        lng: mapPin.longitude,
+      };
+
+      setSelectedAddress(mapped);
+      setAddressQuery(mapped.address);
+      setShowAddressDropdown(false);
+      setAddressSuggestions([]);
+      setShowMapPicker(false);
+      setMapPickedSuggestion(mapped);
+    } catch {
+      setAlertState({
+        visible: true,
+        type: 'error',
+        title: '◆ MAP LOOKUP FAILED',
+        message: 'Could not resolve address from map pin. Try another spot.',
+      });
+    } finally {
+      setIsResolvingMapAddress(false);
+    }
   };
 
   const createMutation = useMutation({
@@ -120,28 +479,54 @@ export default function CreateEventScreen({ navigation }: Props) {
     });
   };
 
-  const getCurrentDateTime = () => {
-    const d = new Date(Date.now() + 86400000);
-    return `${d.getDate().toString().padStart(2, '0')}-${(d.getMonth() + 1).toString().padStart(2, '0')}-${d.getFullYear()} ${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
+  const onDateChange = (event: DateTimePickerEvent, selectedDate?: Date) => {
+    if (Platform.OS === 'android') {
+      setShowDatePicker(false);
+    }
+    if (!selectedDate) return;
+
+    const next = new Date(eventDateTime);
+    next.setFullYear(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate());
+    setEventDateTime(next);
+  };
+
+  const onTimeChange = (event: DateTimePickerEvent, selectedTime?: Date) => {
+    if (Platform.OS === 'android') {
+      setShowTimePicker(false);
+    }
+    if (!selectedTime) return;
+
+    const next = new Date(eventDateTime);
+    next.setHours(selectedTime.getHours(), selectedTime.getMinutes(), 0, 0);
+    setEventDateTime(next);
   };
 
   const handleCreate = () => {
-    if (!title || !description || !venueName || !venueAddress || !city || !dateStr) {
+    if (!title || !description) {
       setAlertState({ visible: true, type: 'warning', title: '◆ INCOMPLETE', message: 'Please fill in all required fields' });
       return;
     }
 
-    const [datePart, timePart] = dateStr.split(' ');
-    const [day, month, year] = datePart.split('-').map(Number);
-    const [hours, minutes] = timePart.split(':').map(Number);
-    const eventDate = new Date(year, month - 1, day, hours, minutes);
+    if (!selectedAddress) {
+      setAlertState({
+        visible: true,
+        type: 'warning',
+        title: '◆ ADDRESS REQUIRED',
+        message: 'Please select an address from the suggestions list.',
+      });
+      return;
+    }
 
     createMutation.mutate({
       title,
       description,
       category,
-      date: eventDate.toISOString(),
-      venue: { name: venueName, address: venueAddress, city, location: { type: 'Point', coordinates: [77.1025, 28.7041] } },
+      date: eventDateTime.toISOString(),
+      venue: {
+        address: selectedAddress.address,
+        city: selectedAddress.city || 'Unknown',
+        location: { type: 'Point', coordinates: [selectedAddress.lng, selectedAddress.lat] },
+      },
       coverImage: imageUri,
       isFree,
       ticketPrice: isFree ? 0 : parseFloat(ticketPrice) || 0,
@@ -176,8 +561,28 @@ export default function CreateEventScreen({ navigation }: Props) {
         
         <TextInput style={[styles.descriptionInput, { backgroundColor: theme.surface, borderColor: theme.border.color, color: theme.textPrimary }]} placeholder={`${getFieldLabel('description')} *`} placeholderTextColor={theme.textSecondary} value={description} onChangeText={setDescription} multiline numberOfLines={3} />
         
-        <Text style={[styles.inputLabel, { color: theme.textPrimary }]}>{getFieldLabel('date')} * (DD-MM-YYYY HH:MM)</Text>
-        <TextInput style={[styles.input, { backgroundColor: theme.surface, borderColor: theme.border.color, color: theme.textPrimary }]} placeholder={getCurrentDateTime()} placeholderTextColor={theme.textSecondary} value={dateStr} onChangeText={setDateStr} />
+        <Text style={[styles.inputLabel, { color: theme.textPrimary }]}>{getFieldLabel('date')} *</Text>
+        <View style={styles.dateTimeRow}>
+          <TouchableOpacity
+            style={[styles.dateTimeButton, { backgroundColor: theme.surface, borderColor: theme.border.color }]}
+            onPress={() => setShowDatePicker(true)}
+          >
+            <Icon name="calendar" size={16} color={theme.accent} />
+            <Text style={[styles.dateTimeButtonText, { color: theme.textPrimary }]}>
+              {format(eventDateTime, 'dd-MM-yyyy')}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.dateTimeButton, { backgroundColor: theme.surface, borderColor: theme.border.color }]}
+            onPress={() => setShowTimePicker(true)}
+          >
+            <Icon name="clock" size={16} color={theme.accent} />
+            <Text style={[styles.dateTimeButtonText, { color: theme.textPrimary }]}>
+              {format(eventDateTime, 'HH:mm')}
+            </Text>
+          </TouchableOpacity>
+        </View>
 
         <Text style={[styles.inputLabel, { color: theme.textPrimary }]}>Ticket Price</Text>
         <View style={{ flexDirection: 'row', gap: 12, marginBottom: 16 }}>
@@ -201,7 +606,14 @@ export default function CreateEventScreen({ navigation }: Props) {
             const isSelected = category === cat;
             const catTheme = categoryThemes[cat as EventCategory];
             return (
-              <TouchableOpacity key={cat} style={[styles.catPill, { backgroundColor: isSelected ? catTheme.accent : catTheme.surface, borderColor: catTheme.border.color }]} onPress={() => setCategory(cat)}>
+              <TouchableOpacity
+                key={cat}
+                style={[styles.catPill, { backgroundColor: isSelected ? catTheme.accent : catTheme.surface, borderColor: catTheme.border.color }]}
+                onPress={() => {
+                  setCategory(cat);
+                  useEventsStore.getState().setFilterCategory(cat as EventCategory);
+                }}
+              >
                 <Text style={[styles.catText, { color: isSelected ? catTheme.accentText : catTheme.textSecondary }]}>{cat.charAt(0).toUpperCase() + cat.slice(1)}</Text>
               </TouchableOpacity>
             );
@@ -209,27 +621,63 @@ export default function CreateEventScreen({ navigation }: Props) {
         </ScrollView>
 
         <View>
-          <Text style={[styles.inputLabel, { color: theme.textPrimary }]}>{getFieldLabel('venueName')} *</Text>
-          <TextInput style={[styles.input, { backgroundColor: theme.surface, borderColor: theme.border.color, color: theme.textPrimary }]} placeholder={`Enter ${getFieldLabel('venueName').toLowerCase()}`} placeholderTextColor={theme.textSecondary} value={venueName} onChangeText={setVenueName} />
-        </View>
-        
-        <View>
           <Text style={[styles.inputLabel, { color: theme.textPrimary }]}>{getFieldLabel('venueAddress')} *</Text>
-          <TextInput style={[styles.input, { backgroundColor: theme.surface, borderColor: theme.border.color, color: theme.textPrimary }]} placeholder={`Enter ${getFieldLabel('venueAddress').toLowerCase()}`} placeholderTextColor={theme.textSecondary} value={venueAddress} onChangeText={setVenueAddress} />
+          <TextInput
+            style={[styles.input, { backgroundColor: theme.surface, borderColor: theme.border.color, color: theme.textPrimary }]}
+            placeholder={`Search ${getFieldLabel('venueAddress').toLowerCase()}...`}
+            placeholderTextColor={theme.textSecondary}
+            value={addressQuery}
+            onChangeText={onAddressInputChange}
+          />
+          {isSearchingAddress && (
+            <View style={styles.addressSearchingRow}>
+              <ActivityIndicator size="small" color={theme.accent} />
+              <Text style={[styles.addressSearchingText, { color: theme.textSecondary }]}>Searching addresses...</Text>
+            </View>
+          )}
+          {showAddressDropdown && (
+            <View style={[styles.cityDropdown, { backgroundColor: theme.surface, borderColor: theme.border.color }]}> 
+              <ScrollView style={{ maxHeight: 180 }} nestedScrollEnabled>
+                {addressSuggestions.map((item) => (
+                  <TouchableOpacity key={`${item.address}-${item.lat}-${item.lng}`} style={styles.cityOption} onPress={() => selectAddress(item)}>
+                    <Text style={{ color: theme.textPrimary, fontWeight: '600' }} numberOfLines={1}>{item.address}</Text>
+                    {item.city ? <Text style={{ color: theme.textSecondary, marginTop: 2 }}>{item.city}</Text> : null}
+                  </TouchableOpacity>
+                ))}
+                {addressNoResults && (
+                  <View style={styles.cityOption}>
+                    <Text style={{ color: theme.textSecondary }}>No places found. Try a more specific query.</Text>
+                  </View>
+                )}
+              </ScrollView>
+            </View>
+          )}
+
+          <TouchableOpacity
+            style={[styles.mapButton, { backgroundColor: theme.surface, borderColor: theme.border.color }]}
+            onPress={() => setShowMapPicker(true)}
+          >
+            <Icon name="map-pin" size={16} color={theme.accent} />
+            <Text style={[styles.mapButtonText, { color: theme.textPrimary }]}>Pick on map</Text>
+          </TouchableOpacity>
+
+          {selectedAddress && mapPin && (
+            <View style={[styles.mapSyncedBadge, { borderColor: theme.accent }]}> 
+              <Icon name="check-circle" size={14} color={theme.accent} />
+              <Text style={[styles.mapSyncedText, { color: theme.textSecondary }]}>Synced with map</Text>
+            </View>
+          )}
         </View>
         
         <View>
           <Text style={[styles.inputLabel, { color: theme.textPrimary }]}>{getFieldLabel('city')} *</Text>
-          <TextInput style={[styles.input, { backgroundColor: theme.surface, borderColor: theme.border.color, color: theme.textPrimary }]} placeholder={`Enter ${getFieldLabel('city').toLowerCase()}`} placeholderTextColor={theme.textSecondary} value={city} onChangeText={handleCityChange} />
-          {showCityDropdown && (
-            <View style={[styles.cityDropdown, { backgroundColor: theme.surface, borderColor: theme.border.color }]}>
-              <FlatList data={citySuggestions} keyExtractor={(item) => item} renderItem={({ item }) => (
-                <TouchableOpacity style={styles.cityOption} onPress={() => selectCity(item)}>
-                  <Text style={{ color: theme.textPrimary }}>{item}</Text>
-                </TouchableOpacity>
-              )} style={{ maxHeight: 150 }} />
-            </View>
-          )}
+          <TextInput
+            style={[styles.input, { backgroundColor: theme.surface, borderColor: theme.border.color, color: theme.textPrimary, opacity: 0.85 }]}
+            placeholder="City will be filled from selected address"
+            placeholderTextColor={theme.textSecondary}
+            value={selectedAddress?.city || ''}
+            editable={false}
+          />
         </View>
 
         <TouchableOpacity style={[styles.submitBtn, categoryStyles.createButton]} onPress={handleCreate} disabled={createMutation.isPending}>
@@ -237,7 +685,95 @@ export default function CreateEventScreen({ navigation }: Props) {
         </TouchableOpacity>
       </View>
 
+      {showDatePicker && (
+        <DateTimePicker
+          value={eventDateTime}
+          mode="date"
+          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+          onChange={onDateChange}
+          minimumDate={new Date()}
+        />
+      )}
+
+      {showTimePicker && (
+        <DateTimePicker
+          value={eventDateTime}
+          mode="time"
+          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+          onChange={onTimeChange}
+        />
+      )}
+
       <ThemedAlert visible={alertState.visible} type={alertState.type} title={alertState.title} message={alertState.message} theme={theme} onClose={() => setAlertState({ ...alertState, visible: false })} confirmText={alertState.confirmText} onConfirm={alertState.onConfirm} />
+
+      <Modal visible={showMapPicker} animationType="slide">
+        <View style={[styles.mapModalContainer, { backgroundColor: theme.background }]}> 
+          <View style={styles.mapModalHeader}>
+            <Text style={[styles.mapModalTitle, { color: theme.textPrimary }]}>Choose Event Location</Text>
+            <TouchableOpacity onPress={() => setShowMapPicker(false)}>
+              <Text style={[styles.mapModalClose, { color: theme.accent }]}>Close</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.mapSearchContainer}>
+            <TextInput
+              style={[styles.input, { backgroundColor: theme.surface, borderColor: theme.border.color, color: theme.textPrimary }]}
+              placeholder="Search place or city on map"
+              placeholderTextColor={theme.textSecondary}
+              value={mapSearchQuery}
+              onChangeText={setMapSearchQuery}
+            />
+            {isSearchingMap && (
+              <View style={styles.addressSearchingRow}>
+                <ActivityIndicator size="small" color={theme.accent} />
+                <Text style={[styles.addressSearchingText, { color: theme.textSecondary }]}>Searching map places...</Text>
+              </View>
+            )}
+            {showMapSearchDropdown && (
+              <View style={[styles.mapSearchDropdown, { backgroundColor: theme.surface, borderColor: theme.border.color }]}> 
+                <ScrollView style={{ maxHeight: 180 }} nestedScrollEnabled>
+                  {mapSearchResults.map((item) => (
+                    <TouchableOpacity key={`map-${item.address}-${item.lat}-${item.lng}`} style={styles.cityOption} onPress={() => selectMapSearchResult(item)}>
+                      <Text style={{ color: theme.textPrimary, fontWeight: '600' }} numberOfLines={1}>{item.address}</Text>
+                      {item.city ? <Text style={{ color: theme.textSecondary, marginTop: 2 }}>{item.city}</Text> : null}
+                    </TouchableOpacity>
+                  ))}
+                  {mapSearchNoResults && (
+                    <View style={styles.cityOption}>
+                      <Text style={{ color: theme.textSecondary }}>No places found. Try hotel, cafe, landmark, or city name.</Text>
+                    </View>
+                  )}
+                </ScrollView>
+              </View>
+            )}
+          </View>
+
+          <WebView
+            key={`osm-${mapWebViewNonce}`}
+            style={styles.mapView}
+            originWhitelist={["*"]}
+            javaScriptEnabled
+            domStorageEnabled
+            source={{ html: getOpenStreetMapHtml(mapCenter, mapPin) }}
+            onMessage={onMapMessage}
+          />
+
+          <View style={styles.mapModalFooter}>
+            <Text style={[styles.mapHintText, { color: theme.textSecondary }]}>Tap map to drop pin, then confirm location.</Text>
+            <TouchableOpacity
+              style={[styles.mapConfirmButton, { backgroundColor: theme.accent, opacity: isResolvingMapAddress ? 0.7 : 1 }]}
+              onPress={confirmMapLocation}
+              disabled={isResolvingMapAddress}
+            >
+              {isResolvingMapAddress ? (
+                <ActivityIndicator color={theme.accentText} />
+              ) : (
+                <Text style={[styles.mapConfirmButtonText, { color: theme.accentText }]}>Confirm map location</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
@@ -259,10 +795,30 @@ const styles = StyleSheet.create({
   catPill: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, marginRight: 8, borderWidth: 1 },
   catText: { fontWeight: '600', fontSize: 13 },
   input: { height: 50, borderRadius: 8, borderWidth: 1, paddingHorizontal: 16, fontSize: 16 },
+  dateTimeRow: { flexDirection: 'row', gap: 12 },
+  dateTimeButton: { flex: 1, height: 50, borderRadius: 8, borderWidth: 1, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  dateTimeButtonText: { fontSize: 15, fontWeight: '600' },
   descriptionInput: { height: 100, borderRadius: 8, borderWidth: 1, padding: 16, fontSize: 16, textAlignVertical: 'top' },
   priceToggle: { flex: 1, paddingVertical: 12, borderRadius: 8, borderWidth: 1, alignItems: 'center' },
+  addressSearchingRow: { flexDirection: 'row', alignItems: 'center', marginTop: 8, gap: 8 },
+  addressSearchingText: { fontSize: 13 },
   cityDropdown: { position: 'absolute', top: 58, left: 0, right: 0, borderWidth: 1, borderRadius: 8, zIndex: 100, elevation: 5 },
   cityOption: { padding: 12, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.1)' },
+  mapButton: { marginTop: 12, height: 44, borderRadius: 8, borderWidth: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
+  mapButtonText: { fontSize: 14, fontWeight: '700' },
+  mapSyncedBadge: { marginTop: 10, borderWidth: 1, borderRadius: 999, alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 6, flexDirection: 'row', alignItems: 'center', gap: 6 },
+  mapSyncedText: { fontSize: 12, fontWeight: '600' },
+  mapModalContainer: { flex: 1 },
+  mapModalHeader: { paddingTop: Platform.OS === 'ios' ? 54 : 24, paddingHorizontal: 20, paddingBottom: 14, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  mapModalTitle: { fontSize: 20, fontWeight: '800' },
+  mapModalClose: { fontSize: 15, fontWeight: '700' },
+  mapSearchContainer: { paddingHorizontal: 16, paddingBottom: 10 },
+  mapSearchDropdown: { marginTop: 6, borderWidth: 1, borderRadius: 8 },
+  mapView: { flex: 1 },
+  mapModalFooter: { padding: 16, gap: 10 },
+  mapHintText: { fontSize: 13 },
+  mapConfirmButton: { height: 48, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  mapConfirmButtonText: { fontSize: 15, fontWeight: '800' },
   submitBtn: { marginTop: 16, paddingVertical: 16, alignItems: 'center', borderRadius: 8 },
   submitText: { fontSize: 16, fontWeight: '700' },
 });

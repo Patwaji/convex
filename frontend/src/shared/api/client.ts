@@ -1,34 +1,27 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Platform } from 'react-native';
-import { categoryThemes } from '../theme/categoryThemes';
+import { API_BASE_URL } from '../config/env';
+import { triggerGlobalAlert } from '../store/globalAlertStore';
 
-const BASE_URL = 'http://192.168.0.104:5000/api';
+const BASE_URL = API_BASE_URL;
 
 // Rate limit state for popup - uses "other" theme as default
-const defaultTheme = categoryThemes.other;
-
 let rateLimitAlertShown = false;
 
 export const showRateLimitAlert = () => {
   if (rateLimitAlertShown) return;
   rateLimitAlertShown = true;
-  
-  const { Alert } = require('react-native');
-  
-  Alert.alert(
-    '⏳ Rate Limit Exceeded',
-    'Too many requests. Please wait 15 minutes before making more requests.\n\n━━━━━━━━━━━━━━━━━━━━━━\n📊 General: 100 requests/15min\n🔐 Auth: 20 requests/15min',
-    [{ 
-      text: 'OK', 
-      onPress: () => { rateLimitAlertShown = false; },
-      style: 'default'
-    }],
-    { 
-      cancelable: true,
-      onDismiss: () => { rateLimitAlertShown = false; }
-    }
-  );
+
+  triggerGlobalAlert({
+    type: 'warning',
+    title: 'RATE LIMIT EXCEEDED',
+    message:
+      'Too many requests. Please wait 15 minutes before making more requests.\n\nGeneral: 100 requests/15min\nAuth: 20 requests/15min',
+    confirmText: 'OK',
+    onConfirm: () => {
+      rateLimitAlertShown = false;
+    },
+  });
 };
 
 export const apiClient = axios.create({
@@ -67,12 +60,15 @@ apiClient.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
+    const requestUrl = originalRequest?.url || '';
+    const isRefreshRequest = typeof requestUrl === 'string' && requestUrl.includes('/auth/refresh');
 
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    if (error.response?.status === 401 && !originalRequest?._retry && !isRefreshRequest) {
       if (isRefreshing) {
         return new Promise((resolve, reject) => {
           failedQueue.push({ resolve, reject });
         }).then((token) => {
+          originalRequest.headers = originalRequest.headers || {};
           originalRequest.headers.Authorization = 'Bearer ' + token;
           return apiClient(originalRequest);
         }).catch((err) => {
@@ -101,6 +97,7 @@ apiClient.interceptors.response.use(
         await AsyncStorage.setItem('@refresh_token', newRefreshToken);
 
         apiClient.defaults.headers.common.Authorization = 'Bearer ' + newAccessToken;
+        originalRequest.headers = originalRequest.headers || {};
         originalRequest.headers.Authorization = 'Bearer ' + newAccessToken;
 
         processQueue(null, newAccessToken);

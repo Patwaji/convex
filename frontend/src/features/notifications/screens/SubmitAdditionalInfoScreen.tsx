@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import Icon from 'react-native-vector-icons/Feather';
 
@@ -7,6 +7,7 @@ import { apiClient } from '../../../shared/api/client';
 import { useEventsStore } from '../../events/store/eventsStore';
 import { getStylesForCategory, categoryThemes } from '../../../shared/theme/categoryThemes';
 import { EventCategory } from '../../events/types';
+import ThemedAlert from '../../../shared/components/ThemedAlert';
 
 type Props = {
   route: { params: { eventId: string } };
@@ -23,6 +24,19 @@ export default function SubmitAdditionalInfoScreen({ route, navigation }: Props)
   const [additionalInfo, setAdditionalInfo] = useState('');
   const [contactPhone, setContactPhone] = useState('');
   const [contactEmail, setContactEmail] = useState('');
+  const [alertState, setAlertState] = useState<{
+    visible: boolean;
+    type: 'success' | 'error' | 'warning' | 'info';
+    title: string;
+    message: string;
+    confirmText?: string;
+    onConfirm?: () => void;
+  }>({
+    visible: false,
+    type: 'info',
+    title: '',
+    message: '',
+  });
 
   const { data: event, isLoading } = useQuery({
     queryKey: ['event', eventId],
@@ -36,18 +50,36 @@ export default function SubmitAdditionalInfoScreen({ route, navigation }: Props)
     mutationFn: async (data: { additionalInfo: string; contactPhone?: string; contactEmail?: string }) =>
       apiClient.post(`/events/${eventId}/submit-info`, data),
     onSuccess: () => {
-      Alert.alert('Submitted!', 'Your additional information has been submitted for review.', [
-        { text: 'OK', onPress: () => navigation.goBack() }
-      ]);
+      setAlertState({
+        visible: true,
+        type: 'success',
+        title: 'SUBMITTED!',
+        message: 'Your additional information has been submitted for review.',
+        confirmText: 'OK',
+        onConfirm: () => {
+          setAlertState((prev) => ({ ...prev, visible: false }));
+          navigation.goBack();
+        },
+      });
     },
     onError: (error: any) => {
-      Alert.alert('Error', error.response?.data?.error?.message || 'Failed to submit information');
+      setAlertState({
+        visible: true,
+        type: 'error',
+        title: 'ERROR',
+        message: error.response?.data?.error?.message || 'Failed to submit information',
+      });
     },
   });
 
   const handleSubmit = () => {
     if (additionalInfo.length < 50) {
-      Alert.alert('Info Required', 'Please provide at least 50 characters of additional information.');
+      setAlertState({
+        visible: true,
+        type: 'warning',
+        title: 'INFO REQUIRED',
+        message: 'Please provide at least 50 characters of additional information.',
+      });
       return;
     }
     submitMutation.mutate({ additionalInfo, contactPhone: contactPhone || undefined, contactEmail: contactEmail || undefined });
@@ -149,6 +181,17 @@ export default function SubmitAdditionalInfoScreen({ route, navigation }: Props)
           )}
         </TouchableOpacity>
       </View>
+
+      <ThemedAlert
+        visible={alertState.visible}
+        type={alertState.type}
+        title={alertState.title}
+        message={alertState.message}
+        theme={theme}
+        onClose={() => setAlertState((prev) => ({ ...prev, visible: false }))}
+        confirmText={alertState.confirmText}
+        onConfirm={alertState.onConfirm}
+      />
     </ScrollView>
   );
 }

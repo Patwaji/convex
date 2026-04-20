@@ -24,7 +24,6 @@ export interface IEvent extends Document {
   date: Date;
   endDate?: Date;
   venue: {
-    name: string;
     address: string;
     city: string;
     location: {
@@ -47,6 +46,12 @@ export interface IEvent extends Document {
     reason: string;
     createdAt: Date;
   }[];
+  additionalProof?: {
+    additionalInfo: string;
+    contactPhone?: string;
+    contactEmail?: string;
+    submittedAt: Date;
+  };
   createdAt: Date;
   updatedAt: Date;
 }
@@ -89,10 +94,6 @@ const eventSchema = new Schema<IEvent>(
       default: undefined,
     },
     venue: {
-      name: {
-        type: String,
-        required: [true, 'Venue name is required'],
-      },
       address: {
         type: String,
         required: [true, 'Venue address is required'],
@@ -185,6 +186,24 @@ const eventSchema = new Schema<IEvent>(
         },
       },
     ],
+    additionalProof: {
+      additionalInfo: {
+        type: String,
+        default: undefined,
+      },
+      contactPhone: {
+        type: String,
+        default: undefined,
+      },
+      contactEmail: {
+        type: String,
+        default: undefined,
+      },
+      submittedAt: {
+        type: Date,
+        default: undefined,
+      },
+    },
   },
   {
     timestamps: true,
@@ -201,6 +220,9 @@ eventSchema.index({ status: 1, category: 1 });
 eventSchema.index({ organizer: 1 });
 eventSchema.index({ date: 1 });
 eventSchema.index({ status: 1, date: -1 });
+eventSchema.index({ category: 1, status: 1, date: -1 });
+eventSchema.index({ organizer: 1, createdAt: -1 });
+eventSchema.index({ attendees: 1, status: 1 });
 
 // ─── Transform: Clean JSON output ──────────────────────────
 eventSchema.set('toJSON', {

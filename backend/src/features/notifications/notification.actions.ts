@@ -5,6 +5,7 @@ import { verifyToken } from '../auth/auth.middleware';
 import { asyncWrapper } from '../../shared/utils/asyncWrapper';
 import { ApiResponse } from '../../shared/utils/ApiResponse';
 import { Event } from '../events/event.model';
+import { User } from '../users/user.model';
 import * as notificationService from './notification.service';
 
 const router = Router();
@@ -44,19 +45,34 @@ router.post(
       return;
     }
 
-    // Store the additional info in rejectionNote temporarily (or could add a new field)
-    const infoMessage = `Additional Info Submitted: ${additionalInfo}${contactPhone ? `\nContact Phone: ${contactPhone}` : ''}${contactEmail ? `\nContact Email: ${contactEmail}` : ''}`;
-    
-    // Update event with info and unflag for re-review
-    event.rejectionNote = infoMessage;
-    event.isFlagged = false;
-    event.flagReason = 'Additional info submitted - under re-review';
+    // Persist proof payload and keep event flagged for admin follow-up.
+    event.additionalProof = {
+      additionalInfo,
+      contactPhone,
+      contactEmail,
+      submittedAt: new Date(),
+    } as any;
+    event.isFlagged = true;
+    event.flagReason = 'Additional info submitted - pending admin review';
+    if (event.status !== 'pending') {
+      event.status = 'pending';
+    }
     await event.save();
 
-    // Notify admin (future: could add admin notification system)
+    // Notify all admins that organizer submitted proof.
+    const admins = await User.find({ role: 'admin' }).select('_id').lean();
+    await Promise.all(
+      admins.map((admin: any) =>
+        notificationService.notifyEventInfoSubmitted(
+          admin._id.toString(),
+          event._id.toString(),
+          event.title
+        )
+      )
+    );
     
     // Confirm to user
-    ApiResponse.success(res, null, 'Additional information submitted. Your event is now under re-review.');
+    ApiResponse.success(res, null, 'Additional information submitted. Your event is now flagged for admin review.');
   })
 );
 

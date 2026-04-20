@@ -4,18 +4,43 @@ import { TextInput, TextInputProps, View, Text, StyleSheet } from 'react-native'
 interface AuthInputProps extends TextInputProps {
   label: string;
   error?: string;
+  theme?: {
+    background?: string;
+    surface?: string;
+    textPrimary?: string;
+    textSecondary?: string;
+    accent?: string;
+    border?: { color: string; width: number };
+  };
 }
 
-export const AuthInput: React.FC<AuthInputProps> = ({ label, error, ...props }) => {
+const defaultTheme = {
+  background: '#0A0A0F',
+  surface: '#12121A',
+  textPrimary: '#E8ECF1',
+  textSecondary: '#6B7280',
+  accent: '#00F0FF',
+  border: { color: '#2D2D3A', width: 1 },
+};
+
+export const AuthInput: React.FC<AuthInputProps> = ({ label, error, theme = defaultTheme, ...props }) => {
   return (
     <View style={styles.container}>
-      <Text style={styles.label}>{label}</Text>
+      <Text style={[styles.label, { color: theme.textSecondary }]}>{label}</Text>
       <TextInput
-        style={[styles.input, error && styles.inputError]}
-        placeholderTextColor="#94A3B8"
+        style={[
+          styles.input, 
+          { 
+            backgroundColor: theme.surface, 
+            color: theme.textPrimary,
+            borderColor: error ? '#EF4444' : (theme.border?.color ?? defaultTheme.border.color)
+          },
+          error && { backgroundColor: theme.background + '40' }
+        ]}
+        placeholderTextColor={theme.textSecondary}
         {...props}
       />
-      {error ? <Text style={styles.errorText}>{error}</Text> : null}
+      {error ? <Text style={[styles.errorText, { color: '#EF4444' }]}>{error}</Text> : null}
     </View>
   );
 };
@@ -28,27 +53,21 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#0F172A',
     marginBottom: 8,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
   input: {
     height: 56,
-    backgroundColor: '#F8FAFC',
     borderRadius: 12,
     paddingHorizontal: 16,
     fontSize: 16,
-    color: '#0F172A',
     borderWidth: 1,
-    borderColor: '#E2E8F0',
   },
   inputError: {
     borderColor: '#EF4444',
-    backgroundColor: '#FEF2F2',
   },
   errorText: {
-    color: '#EF4444',
     fontSize: 12,
     marginTop: 6,
     fontWeight: '500',

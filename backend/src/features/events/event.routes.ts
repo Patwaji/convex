@@ -31,4 +31,7 @@ router.post('/:id/join', verifyToken, asyncWrapper(eventController.joinEvent));
 // POST /api/events/:id/leave — leave event (auth required)
 router.post('/:id/leave', verifyToken, asyncWrapper(eventController.leaveEvent));
 
+// POST /api/events/:id/report — report event (auth required)
+router.post('/:id/report', verifyToken, asyncWrapper(eventController.reportEvent));
+
 export default router;

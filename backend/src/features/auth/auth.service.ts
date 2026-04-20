@@ -112,24 +112,29 @@ export async function refreshTokens(oldRefreshToken: string): Promise<TokenPair>
     throw error;
   }
 
-  // Find user and verify stored refresh token matches
-  const user = await User.findById(decoded.userId).select('+refreshToken');
-  if (!user || user.refreshToken !== oldRefreshToken) {
-    // Token reuse detected — invalidate all tokens for security
-    if (user) {
-      user.refreshToken = undefined;
-      await user.save();
-    }
+  // Lookup the user role to mint next token pair.
+  const user = await User.findById(decoded.userId).select('role');
+  if (!user) {
     const error = new Error('Refresh token has been revoked') as any;
     error.statusCode = 401;
     error.code = 'TOKEN_REVOKED';
     throw error;
   }
 
-  // Generate new token pair (rotation)
+  // Generate next pair and atomically rotate only if old token still matches.
   const tokens = generateTokens(user._id.toString(), user.role);
-  user.refreshToken = tokens.refreshToken;
-  await user.save();
+  const rotated = await User.findOneAndUpdate(
+    { _id: decoded.userId, refreshToken: oldRefreshToken },
+    { $set: { refreshToken: tokens.refreshToken } },
+    { new: true }
+  ).select('_id');
+
+  if (!rotated) {
+    const error = new Error('Refresh token has been revoked') as any;
+    error.statusCode = 401;
+    error.code = 'TOKEN_REVOKED';
+    throw error;
+  }
 
   return tokens;
 }

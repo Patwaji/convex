@@ -1,9 +1,8 @@
 import React from 'react';
-import { View, StyleSheet, Text, FlatList, TouchableOpacity, Dimensions } from 'react-native';
+import { View, StyleSheet, Text, FlatList, TouchableOpacity, Dimensions, ActivityIndicator } from 'react-native';
 import { StackScreenProps } from '@react-navigation/stack';
 import { FlashList } from '@shopify/flash-list';
 import { useQuery } from '@tanstack/react-query';
-import SkeletonPlaceholder from 'react-native-skeleton-placeholder';
 
 import { EventsStackParamList } from '../../../navigation/types';
 import { apiClient } from '../../../shared/api/client';
@@ -19,6 +18,7 @@ const CATEGORIES = ['all', 'tech', 'corporate', 'social', 'sports', 'arts', 'edu
 export default function EventListScreen({ navigation }: Props) {
   const filterCategory = useEventsStore(state => state.filterCategory);
   const setFilterCategory = useEventsStore(state => state.setFilterCategory);
+  const setActiveDetailCategory = useEventsStore(state => state.setActiveDetailCategory);
 
   const theme = filterCategory === 'all' ? categoryThemes.other : categoryThemes[filterCategory as EventCategory];
   const categoryStyles = getStylesForCategory(filterCategory === 'all' ? 'other' : filterCategory as EventCategory);
@@ -44,20 +44,12 @@ export default function EventListScreen({ navigation }: Props) {
     <View style={[styles.skeletonContainer, categoryStyles.container]}>
       {[1, 2, 3].map((key) => (
         <View key={key} style={[styles.skeletonCard, categoryStyles.skeletonCard]}>
-          <SkeletonPlaceholder borderRadius={theme.borderRadius}>
-            <SkeletonPlaceholder.Item>
-              <SkeletonPlaceholder.Item width="100%" height={180} borderBottomLeftRadius={0} borderBottomRightRadius={0} />
-              <SkeletonPlaceholder.Item padding={16}>
-                <SkeletonPlaceholder.Item width={120} height={20} borderRadius={4} marginBottom={12} />
-                <SkeletonPlaceholder.Item width="80%" height={20} borderRadius={4} marginBottom={8} />
-                <SkeletonPlaceholder.Item width="60%" height={20} borderRadius={4} marginBottom={16} />
-                <SkeletonPlaceholder.Item flexDirection="row" alignItems="center">
-                  <SkeletonPlaceholder.Item width={24} height={24} borderRadius={12} marginRight={8} />
-                  <SkeletonPlaceholder.Item width={100} height={16} borderRadius={4} />
-                </SkeletonPlaceholder.Item>
-              </SkeletonPlaceholder.Item>
-            </SkeletonPlaceholder.Item>
-          </SkeletonPlaceholder>
+          <View style={[styles.skeletonImage, { backgroundColor: theme.surface }]} />
+          <View style={styles.skeletonContent}>
+            <View style={[styles.skeletonLine, { width: '40%', backgroundColor: theme.surface }]} />
+            <View style={[styles.skeletonLine, { width: '70%', backgroundColor: theme.surface }]} />
+            <View style={[styles.skeletonLine, { width: '50%', backgroundColor: theme.surface }]} />
+          </View>
         </View>
       ))}
     </View>
@@ -160,7 +152,10 @@ export default function EventListScreen({ navigation }: Props) {
           renderItem={({ item }: { item: Event }) => (
             <EventCard 
               event={item} 
-              onPress={() => navigation.navigate('EventDetail', { id: item._id, category: item.category })} 
+              onPress={() => {
+                setActiveDetailCategory(item.category as EventCategory);
+                navigation.navigate('EventDetail', { id: item._id, category: item.category });
+              }} 
             />
           )}
           contentContainerStyle={styles.listContent}
@@ -312,6 +307,18 @@ socialCreateText: {
     borderRadius: 16,
     overflow: 'hidden',
     backgroundColor: '#FFFFFF',
+  },
+  skeletonImage: {
+    width: '100%',
+    height: 180,
+  },
+  skeletonContent: {
+    padding: 16,
+  },
+  skeletonLine: {
+    height: 20,
+    marginBottom: 8,
+    borderRadius: 4,
   },
   techGridOverlay: {
     ...StyleSheet.absoluteFill,

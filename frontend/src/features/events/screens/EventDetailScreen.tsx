@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Dimensions } from 'react-native';
 import { RouteProp } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
@@ -11,6 +11,8 @@ import { EventsStackParamList } from '../../../navigation/types';
 import { apiClient } from '../../../shared/api/client';
 import { CategoryThemeProvider, useCategoryTheme } from '../components/CategoryThemeProvider';
 import { useAuthStore } from '../../auth/store/authStore';
+import { useEventsStore } from '../store/eventsStore';
+import { categoryThemes, EventCategory } from '../../../shared/theme/categoryThemes';
 
 type EventDetailScreenRouteProp = RouteProp<EventsStackParamList, 'EventDetail'>;
 type EventDetailScreenNavigationProp = StackNavigationProp<EventsStackParamList, 'EventDetail'>;
@@ -25,8 +27,21 @@ const { height } = Dimensions.get('window');
 function EventDetailContent({ navigation, route }: { navigation: EventDetailScreenNavigationProp; route: any }) {
   const { theme } = useCategoryTheme();
   const eventId = route?.params?.id;
+  const routeCategory = route?.params?.category;
   const currentUser = useAuthStore(state => state.user);
+  const setActiveDetailCategory = useEventsStore(state => state.setActiveDetailCategory);
+  const clearActiveDetailCategory = useEventsStore(state => state.clearActiveDetailCategory);
   const queryClient = useQueryClient();
+
+  useEffect(() => {
+    if (routeCategory && routeCategory in categoryThemes) {
+      setActiveDetailCategory(routeCategory as EventCategory);
+    }
+
+    return () => {
+      clearActiveDetailCategory();
+    };
+  }, [clearActiveDetailCategory, routeCategory, setActiveDetailCategory]);
 
   if (!eventId) {
     return (
@@ -43,6 +58,12 @@ function EventDetailContent({ navigation, route }: { navigation: EventDetailScre
       return res.data.data;
     },
   });
+
+  useEffect(() => {
+    if (event?.category && event.category in categoryThemes) {
+      setActiveDetailCategory(event.category as EventCategory);
+    }
+  }, [event?.category, setActiveDetailCategory]);
 
   const joinMutation = useMutation({
     mutationFn: async () => apiClient.post(`/events/${eventId}/join`),
@@ -122,8 +143,8 @@ function EventDetailContent({ navigation, route }: { navigation: EventDetailScre
               </View>
               <View>
                 <Text style={[styles.metaLabel, { color: theme.textSecondary }]}>Location</Text>
-                <Text style={[styles.metaValue, { color: theme.textPrimary }]}>{event.venue.name}</Text>
-                <Text style={[styles.metaSubValue, { color: theme.textSecondary }]}>{event.venue.address}</Text>
+                <Text style={[styles.metaValue, { color: theme.textPrimary }]}>{event.venue.address}</Text>
+                <Text style={[styles.metaSubValue, { color: theme.textSecondary }]}>{event.venue.city}</Text>
               </View>
             </View>
           </View>
