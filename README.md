@@ -86,6 +86,41 @@ Convex is a full-stack event discovery mobile application built with React Nativ
    npm run ios
    ```
 
+## Build APK (Android)
+
+1. Set release backend URL (Vercel) for bundle-time inlining:
+   ```bash
+   export REACT_NATIVE_API_BASE_URL=https://<your-backend>.vercel.app/api
+   ```
+2. Build release APK:
+   ```bash
+   cd frontend/android
+   ./gradlew assembleRelease
+   ```
+3. APK output path:
+   ```bash
+   frontend/android/app/build/outputs/apk/release/app-release.apk
+   ```
+
+## Deploy Backend to Vercel
+
+1. Set Vercel project root to `backend/`.
+2. Add these environment variables in Vercel:
+   - `MONGODB_URI`
+   - `JWT_SECRET`
+   - `JWT_REFRESH_SECRET`
+   - `JWT_EXPIRES_IN`
+   - `JWT_REFRESH_EXPIRES_IN`
+   - `CLOUDINARY_CLOUD_NAME`
+   - `CLOUDINARY_API_KEY`
+   - `CLOUDINARY_API_SECRET`
+   - `NODE_ENV=production`
+   - `CORS_ORIGINS=https://<your-frontend-origin>` (use `*` if only mobile clients)
+3. Deploy backend and verify:
+   ```bash
+   curl https://<your-backend>.vercel.app/api/health
+   ```
+
 ## Folder Structure
 
 - `/backend/src/features` - Express domain-driven routes, controllers, and services.

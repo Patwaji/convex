@@ -1,9 +1,13 @@
 import { NativeModules, Platform } from 'react-native';
 
+declare const __DEV__: boolean;
+
 const DEFAULT_API_URL_BY_PLATFORM: Record<string, string> = {
   android: 'http://localhost:5000/api',
   ios: 'http://localhost:5000/api',
 };
+
+const RELEASE_API_BASE_URL = 'https://YOUR-VERCEL-BACKEND.vercel.app/api';
 
 function readApiBaseUrl(): string | undefined {
   const processEnv = (globalThis as any)?.process?.env;
@@ -77,6 +81,7 @@ function getAutoApiBaseUrl(): string | undefined {
 
 export const API_BASE_URL =
   readApiBaseUrl() ??
+  (!__DEV__ ? RELEASE_API_BASE_URL : undefined) ??
   getAutoApiBaseUrl() ??
   DEFAULT_API_URL_BY_PLATFORM[Platform.OS] ??
   'http://localhost:5000/api';

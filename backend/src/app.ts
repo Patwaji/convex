@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import { errorHandler } from './shared/middleware/errorHandler';
 import { generalLimiter } from './shared/middleware/rateLimiter';
+import { env } from './shared/config/env';
 import authRoutes from './features/auth/auth.routes';
 import eventRoutes from './features/events/event.routes';
 import adminRoutes from './features/admin/admin.routes';
@@ -11,8 +12,24 @@ import notificationActions from './features/notifications/notification.actions';
 
 const app = express();
 
+const allowAllOrigins = env.CORS_ORIGINS.includes('*');
+const allowedOrigins = new Set(env.CORS_ORIGINS);
+
+app.set('trust proxy', 1);
+
 // ─── Global Middleware ──────────────────────────────────────
-app.use(cors());
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      if (allowAllOrigins || !origin || allowedOrigins.has(origin)) {
+        callback(null, true);
+        return;
+      }
+
+      callback(new Error('Not allowed by CORS'));
+    },
+  })
+);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(generalLimiter);

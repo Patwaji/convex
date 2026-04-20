@@ -13,6 +13,7 @@ interface EnvConfig {
   CLOUDINARY_CLOUD_NAME: string;
   CLOUDINARY_API_KEY: string;
   CLOUDINARY_API_SECRET: string;
+  CORS_ORIGINS: string[];
   NODE_ENV: 'development' | 'production' | 'test';
 }
 
@@ -34,5 +35,9 @@ export const env: EnvConfig = {
   CLOUDINARY_CLOUD_NAME: getEnvVar('CLOUDINARY_CLOUD_NAME', ''),
   CLOUDINARY_API_KEY: getEnvVar('CLOUDINARY_API_KEY', ''),
   CLOUDINARY_API_SECRET: getEnvVar('CLOUDINARY_API_SECRET', ''),
+  CORS_ORIGINS: getEnvVar('CORS_ORIGINS', '*')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean),
   NODE_ENV: (getEnvVar('NODE_ENV', 'development') as EnvConfig['NODE_ENV']),
 };
