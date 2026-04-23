@@ -1,13 +1,14 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, TextInput, Dimensions, ActivityIndicator, Modal } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, TextInput, Dimensions, ActivityIndicator, Modal, PermissionsAndroid, Alert, Linking } from 'react-native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import * as ImagePicker from 'react-native-image-picker';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { format } from 'date-fns';
-import Icon from 'react-native-vector-icons/Feather';
+import Icon from '../../../shared/components/AppIcon';
 import FastImage from 'react-native-fast-image';
 import { WebView, WebViewMessageEvent } from 'react-native-webview';
+import GetLocation from 'react-native-get-location';
 
 import { EventsStackParamList } from '../../../navigation/types';
 import { apiClient } from '../../../shared/api/client';
@@ -31,6 +32,11 @@ const SEARCH_HEADERS: Record<string, string> = {
   'User-Agent': 'ConvexApp/1.0',
 };
 
+type LocationAccess = {
+  granted: boolean;
+  highAccuracy: boolean;
+};
+
 type Coordinate = {
   latitude: number;
   longitude: number;
@@ -41,6 +47,12 @@ type CreateEventScreenNavigationProp = StackNavigationProp<EventsStackParamList,
 interface Props {
   navigation: CreateEventScreenNavigationProp;
 }
+
+type SelectedImage = {
+  uri: string;
+  type: string;
+  fileName: string;
+};
 
 export default function CreateEventScreen({ navigation }: Props) {
   const storeFilterCategory = useEventsStore.getState().filterCategory;
@@ -71,8 +83,6 @@ export default function CreateEventScreen({ navigation }: Props) {
   const [eventDateTime, setEventDateTime] = useState<Date>(new Date(Date.now() + 86400000));
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
-  const [isFree, setIsFree] = useState(true);
-  const [ticketPrice, setTicketPrice] = useState('');
   const [addressQuery, setAddressQuery] = useState('');
   const [addressSuggestions, setAddressSuggestions] = useState<AddressSuggestion[]>([]);
   const [showAddressDropdown, setShowAddressDropdown] = useState(false);
@@ -91,9 +101,11 @@ export default function CreateEventScreen({ navigation }: Props) {
   const [showMapSearchDropdown, setShowMapSearchDropdown] = useState(false);
   const [mapSearchNoResults, setMapSearchNoResults] = useState(false);
   const [isSearchingMap, setIsSearchingMap] = useState(false);
+  const [isLocatingCurrent, setIsLocatingCurrent] = useState(false);
   const [mapWebViewNonce, setMapWebViewNonce] = useState(0);
   const [mapPickedSuggestion, setMapPickedSuggestion] = useState<AddressSuggestion | null>(null);
   const [imageUri, setImageUri] = useState<string | null>(null);
+  const [selectedImage, setSelectedImage] = useState<SelectedImage | null>(null);
   const [alertState, setAlertState] = useState<{ visible: boolean; type: 'success' | 'error' | 'warning' | 'info'; title: string; message: string; confirmText?: string; onConfirm?: () => void }>({ visible: false, type: 'info', title: '', message: '' });
   const addressSearchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mapSearchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -243,6 +255,203 @@ export default function CreateEventScreen({ navigation }: Props) {
       latitude: item.lat,
       longitude: item.lng,
     });
+  };
+
+  const reverseGeocodeCoordinates = async (
+    latitude: number,
+    longitude: number
+  ): Promise<AddressSuggestion | null> => {
+    const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&addressdetails=1&lat=${latitude}&lon=${longitude}`;
+    const response = await fetch(url, { headers: SEARCH_HEADERS });
+    const data = await response.json();
+
+    if (!data?.display_name) {
+      return null;
+    }
+
+    return {
+      displayName: data.display_name,
+      address: data.display_name,
+      city: extractCity(data.address),
+      lat: latitude,
+      lng: longitude,
+    };
+  };
+
+  const requestLocationPermissionIfNeeded = async (): Promise<LocationAccess> => {
+    if (Platform.OS !== 'android') {
+      return { granted: true, highAccuracy: true };
+    }
+
+    const finePermission = PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION;
+    const coarsePermission = PermissionsAndroid.PERMISSIONS.ACCESS_COARSE_LOCATION;
+
+    const [hasFineAlready, hasCoarseAlready] = await Promise.all([
+      PermissionsAndroid.check(finePermission),
+      PermissionsAndroid.check(coarsePermission),
+    ]);
+
+    if (hasFineAlready || hasCoarseAlready) {
+      return {
+        granted: true,
+        highAccuracy: hasFineAlready,
+      };
+    }
+
+    const permissionPrompt = {
+      title: 'Location Permission',
+      message: 'Allow location access to auto-fill your event address.',
+      buttonPositive: 'Allow',
+      buttonNegative: 'Deny',
+    };
+
+    const fineResult = await PermissionsAndroid.request(finePermission, permissionPrompt);
+    const coarseResult = await PermissionsAndroid.request(coarsePermission, permissionPrompt);
+
+    const fineGranted = fineResult === PermissionsAndroid.RESULTS.GRANTED;
+    const coarseGranted = coarseResult === PermissionsAndroid.RESULTS.GRANTED;
+
+    return {
+      granted: fineGranted || coarseGranted,
+      highAccuracy: fineGranted,
+    };
+  };
+
+  const openLocationSettings = async () => {
+    try {
+      if (Platform.OS === 'android' && typeof Linking.sendIntent === 'function') {
+        await Linking.sendIntent('android.settings.LOCATION_SOURCE_SETTINGS');
+        return;
+      }
+    } catch {
+      // Fall back to app settings below.
+    }
+
+    try {
+      await Linking.openSettings();
+    } catch {
+      setAlertState({
+        visible: true,
+        type: 'error',
+        title: '◆ SETTINGS UNAVAILABLE',
+        message: 'Could not open settings automatically. Please enable location services manually.',
+      });
+    }
+  };
+
+  const getCurrentCoordinates = async (preferHighAccuracy: boolean) => {
+    const attempts = preferHighAccuracy
+      ? [
+          { enableHighAccuracy: true, timeout: 15000 },
+          { enableHighAccuracy: false, timeout: 20000 },
+        ]
+      : [{ enableHighAccuracy: false, timeout: 20000 }];
+
+    let lastError: any;
+    for (const config of attempts) {
+      try {
+        return await GetLocation.getCurrentPosition(config);
+      } catch (error: any) {
+        lastError = error;
+      }
+    }
+
+    throw lastError;
+  };
+
+  const handleUseCurrentLocation = async () => {
+    if (isLocatingCurrent) return;
+
+    const permission = await requestLocationPermissionIfNeeded();
+    if (!permission.granted) {
+      Alert.alert(
+        'Location permission needed',
+        'Enable location permission to use current location for address auto-fill.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Open Settings',
+            onPress: () => {
+              void openLocationSettings();
+            },
+          },
+        ]
+      );
+      return;
+    }
+
+    setIsLocatingCurrent(true);
+    try {
+      const location = await getCurrentCoordinates(permission.highAccuracy);
+      const mapped = await reverseGeocodeCoordinates(location.latitude, location.longitude);
+
+      const resolvedAddress: AddressSuggestion = mapped ?? {
+        displayName: `${location.latitude.toFixed(6)}, ${location.longitude.toFixed(6)}`,
+        address: `Lat ${location.latitude.toFixed(6)}, Lng ${location.longitude.toFixed(6)}`,
+        city: 'Unknown',
+        lat: location.latitude,
+        lng: location.longitude,
+      };
+
+      setSelectedAddress(resolvedAddress);
+      setAddressQuery(resolvedAddress.address);
+      setShowAddressDropdown(false);
+      setAddressSuggestions([]);
+      setAddressNoResults(false);
+
+      const pin = { latitude: resolvedAddress.lat, longitude: resolvedAddress.lng };
+      setMapPin(pin);
+      setMapCenter(pin);
+      setMapPickedSuggestion(resolvedAddress);
+
+      if (!mapped) {
+        setAlertState({
+          visible: true,
+          type: 'info',
+          title: '◆ COORDINATES SET',
+          message: 'Current coordinates were captured, but readable address could not be resolved.',
+        });
+      }
+    } catch (error: any) {
+      const fallbackMessage = 'Unable to fetch your current location. Ensure GPS is enabled and try again.';
+      const code = String(error?.code || '').toUpperCase();
+      let errMsg = fallbackMessage;
+
+      if (code === 'TIMEOUT') {
+        errMsg = 'Location request timed out. Move to an open area and try again.';
+      } else if (code === 'UNAVAILABLE') {
+        errMsg = 'Location is unavailable on this device right now. Enable GPS and location services.';
+      } else if (code === 'UNAUTHORIZED') {
+        errMsg = 'Location permission was not granted for this app.';
+      } else if (typeof error?.message === 'string' && error.message.trim()) {
+        errMsg = error.message;
+      }
+
+      if (code === 'UNAVAILABLE' || code === 'UNAUTHORIZED') {
+        Alert.alert(
+          'Enable Location Services',
+          errMsg,
+          [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Open Settings',
+              onPress: () => {
+                void openLocationSettings();
+              },
+            },
+          ]
+        );
+      }
+
+      setAlertState({
+        visible: true,
+        type: 'error',
+        title: '◆ LOCATION FAILED',
+        message: errMsg,
+      });
+    } finally {
+      setIsLocatingCurrent(false);
+    }
   };
 
   const getOpenStreetMapHtml = (center: Coordinate, pin: Coordinate | null) => {
@@ -400,11 +609,9 @@ export default function CreateEventScreen({ navigation }: Props) {
 
     try {
       setIsResolvingMapAddress(true);
-      const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&addressdetails=1&lat=${mapPin.latitude}&lon=${mapPin.longitude}`;
-      const response = await fetch(url, { headers: SEARCH_HEADERS });
-      const data = await response.json();
+      const mapped = await reverseGeocodeCoordinates(mapPin.latitude, mapPin.longitude);
 
-      if (!data?.display_name) {
+      if (!mapped) {
         if (selectedAddress) {
           // Fallback to last known good address instead of hard failing.
           const fallbackMapped: AddressSuggestion = {
@@ -419,15 +626,6 @@ export default function CreateEventScreen({ navigation }: Props) {
         }
         throw new Error('No address found for selected pin');
       }
-
-      const cityName = extractCity(data.address);
-      const mapped: AddressSuggestion = {
-        displayName: data.display_name,
-        address: data.display_name,
-        city: cityName,
-        lat: mapPin.latitude,
-        lng: mapPin.longitude,
-      };
 
       setSelectedAddress(mapped);
       setAddressQuery(mapped.address);
@@ -448,7 +646,30 @@ export default function CreateEventScreen({ navigation }: Props) {
   };
 
   const createMutation = useMutation({
-    mutationFn: async (data: any) => apiClient.post('/events', data),
+    mutationFn: async (data: any) => {
+      const { imageFile, ...eventPayload } = data;
+      let coverImageUrl: string | undefined;
+
+      if (imageFile) {
+        const formData = new FormData();
+        formData.append('image', {
+          uri: imageFile.uri,
+          type: imageFile.type,
+          name: imageFile.fileName,
+        } as any);
+
+        const uploadResponse = await apiClient.post('/events/upload-cover', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+
+        coverImageUrl = uploadResponse.data?.data?.url;
+      }
+
+      return apiClient.post('/events', {
+        ...eventPayload,
+        coverImage: coverImageUrl,
+      });
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['events'] });
       setAlertState({
@@ -475,7 +696,17 @@ export default function CreateEventScreen({ navigation }: Props) {
 
   const pickImage = () => {
     ImagePicker.launchImageLibrary({ mediaType: 'photo', selectionLimit: 1, quality: 0.8 }, (response) => {
-      if (response.assets && response.assets.length > 0) setImageUri(response.assets[0].uri!);
+      if (response.assets && response.assets.length > 0) {
+        const asset = response.assets[0];
+        if (!asset?.uri) return;
+
+        setImageUri(asset.uri);
+        setSelectedImage({
+          uri: asset.uri,
+          type: asset.type || 'image/jpeg',
+          fileName: asset.fileName || `event-cover-${Date.now()}.jpg`,
+        });
+      }
     });
   };
 
@@ -527,9 +758,7 @@ export default function CreateEventScreen({ navigation }: Props) {
         city: selectedAddress.city || 'Unknown',
         location: { type: 'Point', coordinates: [selectedAddress.lng, selectedAddress.lat] },
       },
-      coverImage: imageUri,
-      isFree,
-      ticketPrice: isFree ? 0 : parseFloat(ticketPrice) || 0,
+      imageFile: selectedImage,
     });
   };
 
@@ -584,37 +813,31 @@ export default function CreateEventScreen({ navigation }: Props) {
           </TouchableOpacity>
         </View>
 
-        <Text style={[styles.inputLabel, { color: theme.textPrimary }]}>Ticket Price</Text>
-        <View style={{ flexDirection: 'row', gap: 12, marginBottom: 16 }}>
-          <TouchableOpacity style={[styles.priceToggle, { backgroundColor: isFree ? theme.accent : theme.surface, borderColor: theme.border.color }]} onPress={() => setIsFree(true)}>
-            <Text style={{ color: isFree ? theme.accentText : theme.textSecondary, fontWeight: '600' }}>Free</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.priceToggle, { backgroundColor: !isFree ? theme.accent : theme.surface, borderColor: theme.border.color }]} onPress={() => setIsFree(false)}>
-            <Text style={{ color: !isFree ? theme.accentText : theme.textSecondary, fontWeight: '600' }}>Paid</Text>
-          </TouchableOpacity>
+        <Text style={[styles.inputLabel, { color: theme.textPrimary }]}>Ticket Type</Text>
+        <View style={[styles.input, { backgroundColor: theme.surface, borderColor: theme.border.color, justifyContent: 'center' }]}>
+          <Text style={{ color: theme.textSecondary, fontWeight: '600' }}>Free event only</Text>
         </View>
-
-        {!isFree && (
-          <View>
-            <TextInput style={[styles.input, { backgroundColor: theme.surface, borderColor: theme.border.color, color: theme.textPrimary }]} placeholder="Enter ticket price (₹)" placeholderTextColor={theme.textSecondary} value={ticketPrice} onChangeText={setTicketPrice} keyboardType="numeric" />
-          </View>
-        )}
 
         <Text style={[styles.label, { color: theme.textPrimary }]}>Category *</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryScroll}>
           {['tech', 'corporate', 'social', 'sports', 'arts', 'education', 'health', 'other'].map(cat => {
             const isSelected = category === cat;
-            const catTheme = categoryThemes[cat as EventCategory];
             return (
               <TouchableOpacity
                 key={cat}
-                style={[styles.catPill, { backgroundColor: isSelected ? catTheme.accent : catTheme.surface, borderColor: catTheme.border.color }]}
+                style={[
+                  styles.catPill,
+                  {
+                    backgroundColor: isSelected ? theme.accent : theme.surface,
+                    borderColor: isSelected ? theme.accent : theme.border.color,
+                  },
+                ]}
                 onPress={() => {
                   setCategory(cat);
                   useEventsStore.getState().setFilterCategory(cat as EventCategory);
                 }}
               >
-                <Text style={[styles.catText, { color: isSelected ? catTheme.accentText : catTheme.textSecondary }]}>{cat.charAt(0).toUpperCase() + cat.slice(1)}</Text>
+                <Text style={[styles.catText, { color: isSelected ? theme.accentText : theme.textSecondary }]}>{cat.charAt(0).toUpperCase() + cat.slice(1)}</Text>
               </TouchableOpacity>
             );
           })}
@@ -655,6 +878,21 @@ export default function CreateEventScreen({ navigation }: Props) {
 
           <TouchableOpacity
             style={[styles.mapButton, { backgroundColor: theme.surface, borderColor: theme.border.color }]}
+            onPress={handleUseCurrentLocation}
+            disabled={isLocatingCurrent}
+          >
+            {isLocatingCurrent ? (
+              <ActivityIndicator size="small" color={theme.accent} />
+            ) : (
+              <>
+                <Icon name="crosshair" size={16} color={theme.accent} />
+                <Text style={[styles.mapButtonText, { color: theme.textPrimary }]}>Use current location</Text>
+              </>
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.mapButton, styles.mapButtonSpaced, { backgroundColor: theme.surface, borderColor: theme.border.color }]}
             onPress={() => setShowMapPicker(true)}
           >
             <Icon name="map-pin" size={16} color={theme.accent} />
@@ -792,8 +1030,17 @@ const styles = StyleSheet.create({
   label: { fontSize: 14, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 },
   inputLabel: { fontSize: 14, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 },
   categoryScroll: { marginBottom: 16 },
-  catPill: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, marginRight: 8, borderWidth: 1 },
-  catText: { fontWeight: '600', fontSize: 13 },
+  catPill: {
+    minHeight: 40,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    marginRight: 8,
+    borderWidth: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  catText: { fontWeight: '600', fontSize: 13, lineHeight: 18 },
   input: { height: 50, borderRadius: 8, borderWidth: 1, paddingHorizontal: 16, fontSize: 16 },
   dateTimeRow: { flexDirection: 'row', gap: 12 },
   dateTimeButton: { flex: 1, height: 50, borderRadius: 8, borderWidth: 1, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center', gap: 8 },
@@ -805,6 +1052,7 @@ const styles = StyleSheet.create({
   cityDropdown: { position: 'absolute', top: 58, left: 0, right: 0, borderWidth: 1, borderRadius: 8, zIndex: 100, elevation: 5 },
   cityOption: { padding: 12, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.1)' },
   mapButton: { marginTop: 12, height: 44, borderRadius: 8, borderWidth: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
+  mapButtonSpaced: { marginTop: 10 },
   mapButtonText: { fontSize: 14, fontWeight: '700' },
   mapSyncedBadge: { marginTop: 10, borderWidth: 1, borderRadius: 999, alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 6, flexDirection: 'row', alignItems: 'center', gap: 6 },
   mapSyncedText: { fontSize: 12, fontWeight: '600' },

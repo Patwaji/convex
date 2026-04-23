@@ -139,7 +139,7 @@ export default function ExploreScreen() {
         <Text style={[styles.emptyText, { color: theme.textSecondary }]}>
           {activeCategory === 'tech' ? '// Scanning for nodes...' :
            activeCategory === 'corporate' ? 'Searching business directory...' :
-           activeCategory === 'social' ? '🎉 Finding events near you...' :
+           activeCategory === 'social' ? 'Finding events near you...' :
            activeCategory === 'sports' ? 'Searching for games...' :
            activeCategory === 'arts' ? 'Finding galleries...' :
            activeCategory === 'education' ? 'Searching courses...' :

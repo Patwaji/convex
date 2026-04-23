@@ -12,7 +12,8 @@ export const EVENT_CATEGORIES = [
 ] as const;
 
 export type EventCategory = (typeof EVENT_CATEGORIES)[number];
-export type EventStatus = 'pending' | 'approved' | 'rejected';
+export type EventStatus = 'pending' | 'approved' | 'rejected' | 'draft';
+export type DeleteRequestStatus = 'none' | 'pending' | 'rejected';
 
 export interface IEvent extends Document {
   _id: mongoose.Types.ObjectId;
@@ -31,8 +32,6 @@ export interface IEvent extends Document {
       coordinates: [number, number];
     };
   };
-  isFree: boolean;
-  ticketPrice?: number;
   maxAttendees?: number;
   attendees: mongoose.Types.ObjectId[];
   organizer: mongoose.Types.ObjectId;
@@ -52,6 +51,20 @@ export interface IEvent extends Document {
     contactEmail?: string;
     submittedAt: Date;
   };
+  deletionRequest?: {
+    status: DeleteRequestStatus;
+    reason?: string;
+    requestedAt?: Date;
+    reviewedAt?: Date;
+    reviewedBy?: mongoose.Types.ObjectId;
+    adminNote?: string;
+  };
+  paidRsvps: {
+    attendee: mongoose.Types.ObjectId;
+    verificationCode: string;
+    verified: boolean;
+    createdAt: Date;
+  }[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -127,15 +140,6 @@ const eventSchema = new Schema<IEvent>(
         },
       },
     },
-    isFree: {
-      type: Boolean,
-      default: true,
-    },
-    ticketPrice: {
-      type: Number,
-      min: [0, 'Ticket price cannot be negative'],
-      default: undefined,
-    },
     maxAttendees: {
       type: Number,
       min: [1, 'Max attendees must be at least 1'],
@@ -154,8 +158,8 @@ const eventSchema = new Schema<IEvent>(
     },
     status: {
       type: String,
-      enum: ['pending', 'approved', 'rejected'],
-      default: 'pending',
+      enum: ['draft', 'pending', 'approved', 'rejected'],
+      default: 'draft',
     },
     rejectionNote: {
       type: String,
@@ -170,6 +174,10 @@ const eventSchema = new Schema<IEvent>(
       default: undefined,
     },
     reportCount: {
+      type: Number,
+      default: 0,
+    },
+    viewCount: {
       type: Number,
       default: 0,
     },
@@ -204,6 +212,56 @@ const eventSchema = new Schema<IEvent>(
         default: undefined,
       },
     },
+    deletionRequest: {
+      status: {
+        type: String,
+        enum: ['none', 'pending', 'rejected'],
+        default: 'none',
+      },
+      reason: {
+        type: String,
+        default: undefined,
+      },
+      requestedAt: {
+        type: Date,
+        default: undefined,
+      },
+      reviewedAt: {
+        type: Date,
+        default: undefined,
+      },
+      reviewedBy: {
+        type: Schema.Types.ObjectId,
+        ref: 'User',
+        default: undefined,
+      },
+      adminNote: {
+        type: String,
+        default: undefined,
+      },
+    },
+    paidRsvps: [
+      {
+        attendee: {
+          type: Schema.Types.ObjectId,
+          ref: 'User',
+          required: true,
+        },
+        verificationCode: {
+          type: String,
+          required: true,
+          trim: true,
+        },
+        verified: {
+          type: Boolean,
+          default: false,
+        },
+        createdAt: {
+          type: Date,
+          default: Date.now,
+        },
+      },
+    ],
   },
   {
     timestamps: true,
@@ -218,11 +276,14 @@ eventSchema.index({ 'venue.location': '2dsphere' });
 // ─── Additional Indexes for Query Performance ───────────────
 eventSchema.index({ status: 1, category: 1 });
 eventSchema.index({ organizer: 1 });
-eventSchema.index({ date: 1 });
+// TTL index auto-removes documents once event start time is reached.
+// MongoDB TTL monitor runs periodically, so deletion is near-real-time.
+eventSchema.index({ date: 1 }, { expireAfterSeconds: 0 });
 eventSchema.index({ status: 1, date: -1 });
 eventSchema.index({ category: 1, status: 1, date: -1 });
 eventSchema.index({ organizer: 1, createdAt: -1 });
 eventSchema.index({ attendees: 1, status: 1 });
+eventSchema.index({ 'deletionRequest.status': 1, status: 1, createdAt: -1 });
 
 // ─── Transform: Clean JSON output ──────────────────────────
 eventSchema.set('toJSON', {

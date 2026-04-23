@@ -1,54 +1,195 @@
-import React from 'react';
-import { View, StyleSheet, Text, FlatList, TouchableOpacity, Dimensions, ActivityIndicator } from 'react-native';
+import React, { useState } from 'react';
+import { View, StyleSheet, Text, FlatList, TouchableOpacity, TextInput, Modal, Pressable } from 'react-native';
 import { StackScreenProps } from '@react-navigation/stack';
-import { FlashList } from '@shopify/flash-list';
 import { useQuery } from '@tanstack/react-query';
+import LinearGradient from 'react-native-linear-gradient';
+import Icon from '../../../shared/components/AppIcon';
 
 import { EventsStackParamList } from '../../../navigation/types';
 import { apiClient } from '../../../shared/api/client';
 import { EventCard } from '../components/EventCard';
 import { useEventsStore } from '../store/eventsStore';
+import { useAuthStore } from '../../auth/store/authStore';
 import { Event, EventCategory } from '../types';
-import { categoryThemes, getStylesForCategory } from '../../../shared/theme/categoryThemes';
+import { categoryThemes } from '../../../shared/theme/categoryThemes';
 
 type Props = StackScreenProps<EventsStackParamList, 'EventList'>;
 
+type EventListItem =
+  | { type: 'sticky'; key: 'sticky-category-bar' }
+  | { type: 'event'; key: string; event: Event };
+
 const CATEGORIES = ['all', 'tech', 'corporate', 'social', 'sports', 'arts', 'education', 'health', 'other'] as const;
+type HeaderKey = (typeof CATEGORIES)[number];
+
+const UNIFIED_HEADER_ACCENT = '#334155';
+const UNIFIED_HEADER_GRADIENT: [string, string] = ['#FFFFFF', '#F8FAFC'];
+
+const HEADER_VARIANTS: Record<
+  HeaderKey,
+  {
+    status: string;
+    heroLead: string;
+    heroAccent: string;
+    heroTail: string;
+    searchHint: string;
+    accent: string;
+    gradient: [string, string];
+  }
+> = {
+  all: {
+    status: 'Live events nearby',
+    heroLead: 'What are you planning',
+    heroAccent: 'today',
+    heroTail: '?',
+    searchHint: 'Search events, venues, or hosts',
+    accent: '#6D5EF8',
+    gradient: ['#ECE9FF', '#E6F0FF'],
+  },
+  tech: {
+    status: 'Hack nights and talks',
+    heroLead: 'What are you building',
+    heroAccent: 'next',
+    heroTail: '?',
+    searchHint: 'Search meetups, hackathons, speakers',
+    accent: '#00C2FF',
+    gradient: ['#E6FAFF', '#EEF4FF'],
+  },
+  corporate: {
+    status: 'Professional networking active',
+    heroLead: 'Which network are you growing',
+    heroAccent: 'today',
+    heroTail: '?',
+    searchHint: 'Search summits, panels, networking',
+    accent: '#246BFD',
+    gradient: ['#E9F0FF', '#EEF6FF'],
+  },
+  social: {
+    status: 'Hangouts happening now',
+    heroLead: 'Who are you meeting',
+    heroAccent: 'tonight',
+    heroTail: '?',
+    searchHint: 'Search parties, mixers, hangouts',
+    accent: '#FF6B6B',
+    gradient: ['#FFEDEE', '#FFF6ED'],
+  },
+  sports: {
+    status: 'Matches around you',
+    heroLead: 'Ready for game',
+    heroAccent: 'time',
+    heroTail: '?',
+    searchHint: 'Search tournaments, courts, clubs',
+    accent: '#F59E0B',
+    gradient: ['#FFF3DF', '#FFF9ED'],
+  },
+  arts: {
+    status: 'Creative spaces open',
+    heroLead: 'What are you creating',
+    heroAccent: 'today',
+    heroTail: '?',
+    searchHint: 'Search exhibitions, galleries, live art',
+    accent: '#B453E4',
+    gradient: ['#F8EEFF', '#FFF4FA'],
+  },
+  education: {
+    status: 'Learning sessions live',
+    heroLead: 'What do you want to',
+    heroAccent: 'learn',
+    heroTail: '?',
+    searchHint: 'Search workshops, seminars, classes',
+    accent: '#0EA5A4',
+    gradient: ['#E6FBF8', '#F0FFFB'],
+  },
+  health: {
+    status: 'Wellness events nearby',
+    heroLead: 'How are you recharging',
+    heroAccent: 'today',
+    heroTail: '?',
+    searchHint: 'Search yoga, mindfulness, wellness',
+    accent: '#10B981',
+    gradient: ['#E9FFF4', '#F4FFF8'],
+  },
+  other: {
+    status: 'Unique plans unlocked',
+    heroLead: 'What are you exploring',
+    heroAccent: 'today',
+    heroTail: '?',
+    searchHint: 'Search unique events and experiences',
+    accent: '#64748B',
+    gradient: ['#F1F5F9', '#F8FAFC'],
+  },
+};
 
 export default function EventListScreen({ navigation }: Props) {
   const filterCategory = useEventsStore(state => state.filterCategory);
   const setFilterCategory = useEventsStore(state => state.setFilterCategory);
   const setActiveDetailCategory = useEventsStore(state => state.setActiveDetailCategory);
+  const user = useAuthStore(state => state.user);
 
-  const theme = filterCategory === 'all' ? categoryThemes.other : categoryThemes[filterCategory as EventCategory];
-  const categoryStyles = getStylesForCategory(filterCategory === 'all' ? 'other' : filterCategory as EventCategory);
-  const isTech = filterCategory === 'tech';
-  const isCorporate = filterCategory === 'corporate';
-  const isSocial = filterCategory === 'social';
-  const isSports = filterCategory === 'sports';
-  const isArts = filterCategory === 'arts';
-  const isEducation = filterCategory === 'education';
-  const isHealth = filterCategory === 'health';
-  const isOther = filterCategory === 'other' || filterCategory === 'all';
+  const [searchQuery, setSearchQuery] = useState('');
+  const [dateFilter, setDateFilter] = useState<string>('');
+  const [sortBy, setSortBy] = useState<'date' | 'popularity'>('date');
+  const [showSortModal, setShowSortModal] = useState(false);
+
+  const neutralTheme = categoryThemes.other;
+  const headerKey = (CATEGORIES.includes(filterCategory as HeaderKey) ? filterCategory : 'all') as HeaderKey;
+  const headerVariant = {
+    ...HEADER_VARIANTS[headerKey],
+    accent: UNIFIED_HEADER_ACCENT,
+    gradient: UNIFIED_HEADER_GRADIENT,
+  };
 
   const { data, isLoading, isError, refetch, isRefetching } = useQuery({
-    queryKey: ['events', filterCategory],
+    queryKey: ['events', filterCategory, user?.hobbies, searchQuery, dateFilter, sortBy],
     queryFn: async () => {
-      const params = filterCategory === 'all' ? {} : { category: filterCategory };
+      const params: Record<string, any> = {};
+      if (filterCategory !== 'all') {
+        params.category = filterCategory;
+      }
+      if (user?.hobbies && user.hobbies.length > 0) {
+        params.hobbies = user.hobbies;
+      }
+      if (searchQuery.trim()) {
+        params.search = searchQuery.trim();
+      }
+      if (dateFilter) {
+        params.dateFilter = dateFilter;
+      }
+      if (sortBy) {
+        params.sort = sortBy;
+      }
       const response = await apiClient.get('/events', { params });
       return response.data.data;
     },
   });
 
+  const dateFilters = [
+    { key: '', label: 'All' },
+    { key: 'today', label: 'Today' },
+    { key: 'week', label: 'This Week' },
+    { key: 'month', label: 'This Month' },
+  ];
+
+  const sortOptions = [
+    { key: 'date', label: 'Nearest Date', icon: 'calendar' },
+    { key: 'popularity', label: 'Most Popular', icon: 'users' },
+  ];
+
+  const events = (data as Event[] | undefined) ?? [];
+  const listData: EventListItem[] = [
+    { type: 'sticky', key: 'sticky-category-bar' } as EventListItem,
+    ...events.map((event) => ({ type: 'event' as const, key: event._id, event })),
+  ];
+
   const renderSkeleton = () => (
-    <View style={[styles.skeletonContainer, categoryStyles.container]}>
+    <View style={styles.skeletonContainer}>
       {[1, 2, 3].map((key) => (
-        <View key={key} style={[styles.skeletonCard, categoryStyles.skeletonCard]}>
-          <View style={[styles.skeletonImage, { backgroundColor: theme.surface }]} />
+        <View key={key} style={styles.skeletonCard}>
+          <View style={[styles.skeletonImage, { backgroundColor: '#E2E8F0' }]} />
           <View style={styles.skeletonContent}>
-            <View style={[styles.skeletonLine, { width: '40%', backgroundColor: theme.surface }]} />
-            <View style={[styles.skeletonLine, { width: '70%', backgroundColor: theme.surface }]} />
-            <View style={[styles.skeletonLine, { width: '50%', backgroundColor: theme.surface }]} />
+            <View style={[styles.skeletonLine, { width: '40%', backgroundColor: '#E2E8F0' }]} />
+            <View style={[styles.skeletonLine, { width: '70%', backgroundColor: '#E2E8F0' }]} />
+            <View style={[styles.skeletonLine, { width: '50%', backgroundColor: '#E2E8F0' }]} />
           </View>
         </View>
       ))}
@@ -57,112 +198,208 @@ export default function EventListScreen({ navigation }: Props) {
 
   const renderCategoryPill = ({ item }: { item: typeof CATEGORIES[number] }) => {
     const isSelected = filterCategory === item;
-    const pillTheme = item === 'all' ? categoryThemes.other : categoryThemes[item as EventCategory];
-    const isPillTech = item === 'tech';
-    const isPillSocial = item === 'social';
     return (
       <TouchableOpacity
         style={[
-          styles.pill, 
-          { backgroundColor: pillTheme.surface },
-          isSelected && categoryStyles.pillSelected,
-          !isSelected && item !== 'all' && { borderWidth: theme.border.width, borderColor: theme.border.color },
-          isPillTech && !isSelected && { borderWidth: 1, borderColor: '#00F0FF44', borderStyle: 'dashed' as const },
-          isPillTech && isSelected && { backgroundColor: 'transparent', borderWidth: 1, borderColor: '#00F0FF' },
-          isPillSocial && isSelected && { backgroundColor: '#FF6B6B', borderRadius: 20 }
+          styles.pill,
+          {
+            backgroundColor: isSelected ? headerVariant.accent : neutralTheme.surface,
+            borderColor: isSelected ? headerVariant.accent : neutralTheme.border.color,
+          },
         ]}
         onPress={() => setFilterCategory(item as EventCategory)}
       >
         <Text style={[
-          styles.pillText, 
-          { color: isSelected ? pillTheme.accentText : pillTheme.textSecondary },
-          isPillTech && isSelected && { color: '#00F0FF', fontFamily: 'monospace', letterSpacing: 1 },
-          isPillSocial && isSelected && { color: '#FFFFFF', fontWeight: '700' }
+          styles.pillText,
+          { color: isSelected ? '#FFFFFF' : neutralTheme.textSecondary },
         ]}>
-          {isPillTech && isSelected ? item.toUpperCase() : 
-           isPillSocial && isSelected ? '✨ ' + item.charAt(0).toUpperCase() + item.slice(1) :
-           item.charAt(0).toUpperCase() + item.slice(1)}
+          {item.charAt(0).toUpperCase() + item.slice(1)}
         </Text>
       </TouchableOpacity>
     );
   };
 
-  const renderCategoryBackground = () => {
-    if (isTech) {
-      return <View style={styles.techBgOverlay} pointerEvents="none" />;
-    }
-    return null;
-  };
+  const renderTopSection = () => (
+    <LinearGradient colors={headerVariant.gradient} style={styles.headerGradient}>
+      <View style={styles.headerGlowLeft} />
+      <View style={styles.headerGlowRight} />
+      <View style={styles.headerTopRow}>
+        <Text style={styles.eventsHeading}>Events</Text>
 
-  return (
-    <View style={[styles.container, categoryStyles.container]}>
-      <View style={StyleSheet.absoluteFill} pointerEvents="none">
-        {renderCategoryBackground()}
-      </View>
-      
-      <View style={[styles.header, categoryStyles.header, isTech && styles.techHeader, { zIndex: 1 }]}>
-        <View style={styles.titleRow}>
-          <Text style={[styles.title, categoryStyles.title, isTech && styles.techTitle]}>
-            {isTech ? 'DISCOVER' : isCorporate ? 'NETWORK' : isSocial ? 'Fun Events' : isSports ? 'GAME ON' : isArts ? 'Artistry' : isEducation ? 'Learn' : isHealth ? 'Wellness' : isOther ? 'Events' : 'Discover'}
-          </Text>
-        </View>
-        <TouchableOpacity 
-          style={[styles.createButton, categoryStyles.createButton, isTech && styles.techCreateButton]} 
+        <TouchableOpacity
+          style={[styles.createTopButton, { backgroundColor: headerVariant.accent }]}
           onPress={() => navigation.navigate('CreateEvent')}
         >
-          <Text style={[styles.createButtonText, categoryStyles.createButtonText, isTech && styles.techCreateText]}>
-            {isTech ? '+ NEW' : isCorporate ? 'CONNECT' : isSocial ? 'Host' : isSports ? 'HOST' : isArts ? 'Create' : isEducation ? 'Study' : isHealth ? 'Join' : isOther ? 'Create' : '+ Create'}
-          </Text>
+          <Text style={styles.createTopButtonText}>Create</Text>
         </TouchableOpacity>
       </View>
 
-      <View style={[styles.filters, { marginTop: isTech ? 8 : 0 }]}>
+      <View style={styles.header}>
+        <View style={styles.titleRow}>
+          <Text style={styles.title}>
+            {headerVariant.heroLead}{' '}
+            <Text style={[styles.titleAccent, { color: headerVariant.accent }]}>{headerVariant.heroAccent}</Text>
+            {headerVariant.heroTail}
+          </Text>
+        </View>
+      </View>
+
+      <View style={styles.searchBar}>
+        <Icon name="search" size={20} color="#475569" />
+        <TextInput
+          style={styles.searchInput}
+          placeholder={headerVariant.searchHint}
+          placeholderTextColor="#94A3B8"
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          returnKeyType="search"
+        />
+        {searchQuery.length > 0 && (
+          <TouchableOpacity onPress={() => setSearchQuery('')}>
+            <Icon name="x" size={18} color="#94A3B8" />
+          </TouchableOpacity>
+        )}
+      </View>
+
+      <View style={styles.filterRow}>
         <FlatList
           horizontal
           showsHorizontalScrollIndicator={false}
-          data={CATEGORIES}
-          keyExtractor={item => item}
-          renderItem={renderCategoryPill}
-          contentContainerStyle={styles.filtersContent}
+          data={dateFilters}
+          keyExtractor={item => item.key}
+          renderItem={({ item: dateItem }) => (
+            <TouchableOpacity
+              style={[
+                styles.dateFilterPill,
+                {
+                  backgroundColor: dateFilter === dateItem.key ? headerVariant.accent + '20' : neutralTheme.surface,
+                  borderColor: dateFilter === dateItem.key ? headerVariant.accent : neutralTheme.border.color,
+                },
+              ]}
+              onPress={() => setDateFilter(dateItem.key)}
+            >
+              <Text
+                style={[
+                  styles.dateFilterText,
+                  { color: dateFilter === dateItem.key ? headerVariant.accent : neutralTheme.textSecondary },
+                ]}
+              >
+                {dateItem.label}
+              </Text>
+            </TouchableOpacity>
+          )}
+          contentContainerStyle={styles.dateFiltersContent}
         />
+        <TouchableOpacity
+          style={[styles.sortButton, { backgroundColor: neutralTheme.surface, borderColor: neutralTheme.border.color }]}
+          onPress={() => setShowSortModal(true)}
+        >
+          <Icon name={sortBy === 'popularity' ? 'users' : 'calendar'} size={16} color={headerVariant.accent} />
+          <Text style={[styles.sortButtonText, { color: headerVariant.accent }]}> 
+            {sortBy === 'popularity' ? 'Popular' : 'Date'}
+          </Text>
+          <Icon name="chevron-right" size={14} color={headerVariant.accent} style={{ transform: [{ rotate: '90deg' }] }} />
+        </TouchableOpacity>
       </View>
+    </LinearGradient>
+  );
+
+  const renderStickyCategoryBar = () => (
+    <View style={[styles.stickyCategoryBar, { borderBottomColor: neutralTheme.border.color, backgroundColor: '#F3F4F6' }]}>
+      <View style={styles.categoryHeaderRow}>
+        <Text style={styles.categoryHeading}>Category</Text>
+        <Text style={[styles.categorySeeAll, { color: `${headerVariant.accent}CC` }]}>See all</Text>
+      </View>
+
+      <FlatList
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        data={CATEGORIES}
+        keyExtractor={item => item}
+        renderItem={renderCategoryPill}
+        contentContainerStyle={styles.filtersContent}
+      />
+    </View>
+  );
+
+  return (
+    <View style={styles.container}>
 
       {isLoading ? (
         renderSkeleton()
       ) : isError ? (
         <View style={styles.centerContainer}>
           <Text style={[styles.errorText, { color: '#EF4444' }]}>Failed to load events.</Text>
-          <TouchableOpacity onPress={() => refetch()} style={[styles.retryButton, { backgroundColor: theme.surface }]}>
-            <Text style={[styles.retryText, { color: theme.textPrimary }]}>Retry</Text>
+          <TouchableOpacity onPress={() => refetch()} style={[styles.retryButton, { backgroundColor: neutralTheme.surface }]}> 
+            <Text style={[styles.retryText, { color: neutralTheme.textPrimary }]}>Retry</Text>
           </TouchableOpacity>
         </View>
-      ) : data?.length === 0 ? (
-        <View style={styles.centerContainer}>
-          <Text style={[styles.emptyText, { color: theme.textSecondary }]}>
-            {filterCategory === 'tech' ? '// No events found in system' : 
-             filterCategory === 'social' ? '🎉 No parties yet! Be the first to host one' :
-             filterCategory === 'sports' ? 'NO ACTIVE EVENTS' :
-             filterCategory === 'arts' ? 'No artworks on display' :
-             'No events found in this category'}
-          </Text>
-        </View>
       ) : (
-        <FlashList
-          data={data as Event[]}
-          renderItem={({ item }: { item: Event }) => (
-            <EventCard 
-              event={item} 
-              onPress={() => {
-                setActiveDetailCategory(item.category as EventCategory);
-                navigation.navigate('EventDetail', { id: item._id, category: item.category });
-              }} 
-            />
-          )}
+        <FlatList
+          data={listData}
+          keyExtractor={(item) => item.key}
+          renderItem={({ item }) => {
+            if (item.type === 'sticky') {
+              return renderStickyCategoryBar();
+            }
+
+            return (
+              <EventCard
+                event={item.event}
+                onPress={() => {
+                  setActiveDetailCategory(item.event.category as EventCategory);
+                  navigation.navigate('EventDetail', { id: item.event._id, category: item.event.category });
+                }}
+              />
+            );
+          }}
+          ListHeaderComponent={renderTopSection}
+          ListFooterComponent={
+            events.length === 0 ? (
+              <View style={styles.emptyStateWrap}>
+                <Text style={[styles.emptyText, { color: neutralTheme.textSecondary }]}>No events found in this category</Text>
+              </View>
+            ) : null
+          }
+          stickyHeaderIndices={[1]}
           contentContainerStyle={styles.listContent}
           onRefresh={refetch}
           refreshing={isRefetching}
+          showsVerticalScrollIndicator={false}
         />
       )}
+
+      <Modal visible={showSortModal} transparent animationType="fade">
+        <Pressable style={styles.modalBackdrop} onPress={() => setShowSortModal(false)}>
+          <View style={[styles.sortModal, { backgroundColor: neutralTheme.surface }]}>
+            <Text style={[styles.sortModalTitle, { color: neutralTheme.textPrimary }]}>Sort By</Text>
+            {sortOptions.map(option => (
+              <TouchableOpacity
+                key={option.key}
+                style={[
+                  styles.sortOption,
+                  { borderColor: sortBy === option.key ? headerVariant.accent : neutralTheme.border.color }
+                ]}
+                onPress={() => {
+                  setSortBy(option.key as 'date' | 'popularity');
+                  setShowSortModal(false);
+                }}
+              >
+                <Icon name={option.icon} size={18} color={sortBy === option.key ? headerVariant.accent : neutralTheme.textSecondary} />
+                <Text style={[
+                  styles.sortOptionText,
+                  { color: sortBy === option.key ? headerVariant.accent : neutralTheme.textPrimary }
+                ]}>
+                  {option.label}
+                </Text>
+                {sortBy === option.key && (
+                  <Icon name="check" size={18} color={headerVariant.accent} />
+                )}
+              </TouchableOpacity>
+            ))}
+          </View>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -170,110 +407,164 @@ export default function EventListScreen({ navigation }: Props) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: '#F3F4F6',
   },
-  header: {
+  headerGradient: {
+    paddingBottom: 12,
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
+    overflow: 'hidden',
+    marginBottom: 10,
+  },
+  headerGlowLeft: {
+    position: 'absolute',
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    backgroundColor: 'rgba(255,255,255,0.35)',
+    top: -120,
+    left: -80,
+  },
+  headerGlowRight: {
+    position: 'absolute',
+    width: 180,
+    height: 180,
+    borderRadius: 90,
+    backgroundColor: 'rgba(255,255,255,0.22)',
+    top: -100,
+    right: -60,
+  },
+  headerTopRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-end',
     paddingHorizontal: 24,
-    paddingTop: 60,
-    paddingBottom: 20,
-    position: 'relative',
+    paddingTop: 44,
+    paddingBottom: 8,
   },
-  techHeader: {
-    paddingBottom: 12,
-    borderBottomWidth: 0,
+  eventsHeading: {
+    fontSize: 48,
+    lineHeight: 52,
+    fontWeight: '800',
+    color: '#1E293B',
+    letterSpacing: -1,
+  },
+  createTopButton: {
+    minWidth: 120,
+    height: 50,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+    marginBottom: 2,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  createTopButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  header: {
+    paddingHorizontal: 24,
+    paddingTop: 8,
+    paddingBottom: 10,
   },
   titleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    width: '100%',
   },
-title: {
+  title: {
     fontSize: 32,
     fontWeight: '800',
     color: '#0F172A',
-    letterSpacing: -0.5,
+    letterSpacing: -0.6,
   },
-  techTitle: {
-    fontFamily: 'monospace',
-    letterSpacing: 1,
-    color: '#00F0FF',
+  titleAccent: {
+    fontWeight: '900',
   },
-  socialHeader: {
-    paddingBottom: 20,
-  },
-  socialTitle: {
-    color: '#FF6B6B',
-  },
-  socialEmoji: {
-    fontSize: 24,
-    marginRight: 8,
-  },
-  createButton: {
-    backgroundColor: '#0F172A',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 20,
-  },
-  techCreateButton: {
-    backgroundColor: 'transparent',
+  searchBar: {
+    marginHorizontal: 24,
+    marginTop: 2,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#FFFFFFD9',
     borderWidth: 1,
-    borderColor: '#00F0FF',
+    borderColor: '#FFFFFF',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 18,
+    gap: 10,
   },
-  createButtonText: {
-    color: '#FFFFFF',
+  searchInput: {
+    flex: 1,
+    fontSize: 18,
+    color: '#1E293B',
+    fontWeight: '500',
+  },
+  searchText: {
+    fontSize: 18,
+    color: '#475569',
+    fontWeight: '500',
+  },
+  categoryHeaderRow: {
+    marginTop: 12,
+    marginBottom: 8,
+    paddingHorizontal: 24,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  categoryHeading: {
+    fontSize: 22,
+    color: '#0F172A',
+    fontWeight: '800',
+  },
+  categorySeeAll: {
+    fontSize: 16,
     fontWeight: '700',
-    fontSize: 14,
-  },
-  techCreateText: {
-    color: '#00F0FF',
-    fontFamily: 'monospace',
-  },
-  socialCreateButton: {
-    backgroundColor: '#FF6B6B',
-    borderWidth: 0,
-    borderRadius: 24,
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    shadowColor: '#FF6B6B',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-socialCreateText: {
-    color: '#FFFFFF',
-    fontWeight: '700',
-    fontSize: 15,
-  },
-  filters: {
-    marginBottom: 16,
   },
   filtersContent: {
     paddingHorizontal: 24,
     gap: 8,
+    paddingBottom: 12,
+  },
+  stickyCategoryBar: {
+    borderBottomWidth: 0,
+    paddingTop: 4,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0,
+    shadowRadius: 0,
+    elevation: 0,
+    zIndex: 3,
   },
   pill: {
+    minHeight: 40,
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
+    borderWidth: 1,
     backgroundColor: '#E2E8F0',
     marginRight: 8,
-  },
-  pillSelected: {
-    backgroundColor: '#6366F1',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   pillText: {
     color: '#475569',
     fontWeight: '600',
-    fontSize: 14,
-  },
-  pillTextSelected: {
-    color: '#FFFFFF',
+    fontSize: 13,
+    lineHeight: 18,
   },
   listContent: {
     paddingBottom: 100,
+  },
+  emptyStateWrap: {
+    paddingTop: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   centerContainer: {
     flex: 1,
@@ -320,42 +611,70 @@ socialCreateText: {
     marginBottom: 8,
     borderRadius: 4,
   },
-  techGridOverlay: {
-    ...StyleSheet.absoluteFill,
-    overflow: 'hidden',
+  filterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 24,
+    marginTop: 10,
+    marginBottom: 12,
   },
-  techBgOverlay: {
-    ...StyleSheet.absoluteFill,
-    backgroundColor: '#0A0A0F',
+  dateFiltersContent: {
+    paddingRight: 12,
   },
-  socialBgOverlay: {
-    ...StyleSheet.absoluteFill,
-    backgroundColor: '#FFF1EE',
-    overflow: 'hidden',
+  dateFilterPill: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+    marginRight: 8,
   },
-  socialBubble: {
-    position: 'absolute',
-    top: -50,
+  dateFilterText: {
+    fontSize: 12,
+    fontWeight: '600',
   },
-  gridLine: {
-    position: 'absolute',
-    top: 0,
-    bottom: 0,
-    width: 1,
-    backgroundColor: '#00F0FF',
+  sortButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    borderWidth: 1,
   },
-  gridLineHorizontal: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    height: 1,
-    backgroundColor: '#00F0FF',
+  sortButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
   },
-  scanLine: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    height: 2,
-    backgroundColor: '#00F0FF',
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  sortModal: {
+    width: '85%',
+    maxWidth: 320,
+    borderRadius: 20,
+    padding: 20,
+  },
+  sortModalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 16,
+  },
+  sortOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginBottom: 10,
+  },
+  sortOptionText: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '600',
   },
 });

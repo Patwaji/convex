@@ -56,6 +56,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
+    lineHeight: 18,
   },
   input: {
     height: 56,
@@ -71,5 +72,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 6,
     fontWeight: '500',
+    lineHeight: 16,
   },
 });

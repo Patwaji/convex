@@ -1,18 +1,20 @@
-import React from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator } from 'react-native';
+import React, { useEffect } from 'react';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, BackHandler } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, CompositeNavigationProp } from '@react-navigation/native';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
+import { StackNavigationProp } from '@react-navigation/stack';
 import FastImage from 'react-native-fast-image';
 import { format } from 'date-fns';
+import Icon from '../../../shared/components/AppIcon';
 
 import { apiClient } from '../../../shared/api/client';
 import { useEventsStore } from '../store/eventsStore';
 import { getStylesForCategory, categoryThemes } from '../../../shared/theme/categoryThemes';
 import { EventCategory } from '../types';
-import { AppTabsParamList } from '../../../navigation/types';
+import { UserStackParamList } from '../../../navigation/types';
 
-type MyEventsNavigationProp = BottomTabNavigationProp<AppTabsParamList, 'MyEvents'>;
+type MyEventsNavigationProp = StackNavigationProp<UserStackParamList, 'MyEvents'>;
 
 export default function MyEventsScreen() {
   const navigation = useNavigation<MyEventsNavigationProp>();
@@ -21,6 +23,14 @@ export default function MyEventsScreen() {
   const activeCategory = (filterCategory === 'all' ? 'other' : filterCategory) as EventCategory;
   const categoryStyles = getStylesForCategory(activeCategory);
   const theme = categoryThemes[activeCategory];
+
+  useEffect(() => {
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
+      navigation.navigate('Tabs', { screen: 'Profile' });
+      return true;
+    });
+    return () => backHandler.remove();
+  }, [navigation]);
 
   const { data: events, isLoading } = useQuery({
     queryKey: ['my-events'],
@@ -40,10 +50,7 @@ export default function MyEventsScreen() {
         style={[styles.card, eventStyles.card]}
         onPress={() => {
           setActiveDetailCategory(eventCategory);
-          navigation.navigate('EventsTab', {
-            screen: 'EventDetail',
-            params: { id: item._id, category: eventCategory },
-          });
+          navigation.navigate('EventDetail', { id: item._id, category: eventCategory });
         }}
       >
         <FastImage
@@ -81,6 +88,9 @@ export default function MyEventsScreen() {
   return (
     <View style={[styles.container, categoryStyles.container]}>
       <View style={styles.header}>
+        <TouchableOpacity onPress={() => navigation.navigate('Tabs', { screen: 'Profile' })} style={styles.backBtn}>
+          <Icon name="arrow-left" size={20} color={theme.textPrimary} />
+        </TouchableOpacity>
         <Text style={[styles.title, categoryStyles.title]}>My Events</Text>
       </View>
 
@@ -105,8 +115,9 @@ export default function MyEventsScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  header: { padding: 24, paddingTop: 60, paddingBottom: 16 },
-  title: { fontSize: 32, fontWeight: '800' },
+  header: { padding: 24, paddingTop: 60, paddingBottom: 16, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  backBtn: { padding: 4 },
+  title: { fontSize: 32, fontWeight: '800', flex: 1 },
   list: { padding: 24, paddingTop: 0 },
   card: { marginBottom: 20, borderRadius: 16, overflow: 'hidden' },
   cardImage: { width: '100%', height: 160 },

@@ -8,8 +8,12 @@ export interface IUser extends Document {
   password: string;
   role: 'user' | 'admin';
   avatar?: string;
+  gender?: 'male' | 'female' | 'other' | 'prefer_not_to_say';
+  dateOfBirth?: Date;
+  hobbies?: string[];
   joinedEvents: mongoose.Types.ObjectId[];
   createdEvents: mongoose.Types.ObjectId[];
+  draftEvents: mongoose.Types.ObjectId[];
   refreshToken?: string;
   createdAt: Date;
   updatedAt: Date;
@@ -48,6 +52,19 @@ const userSchema = new Schema<IUser>(
       type: String,
       default: undefined,
     },
+    gender: {
+      type: String,
+      enum: ['male', 'female', 'other', 'prefer_not_to_say'],
+      default: undefined,
+    },
+    dateOfBirth: {
+      type: Date,
+      default: undefined,
+    },
+    hobbies: [{
+      type: String,
+      trim: true,
+    }],
     joinedEvents: [
       {
         type: Schema.Types.ObjectId,
@@ -55,6 +72,12 @@ const userSchema = new Schema<IUser>(
       },
     ],
     createdEvents: [
+      {
+        type: Schema.Types.ObjectId,
+        ref: 'Event',
+      },
+    ],
+    draftEvents: [
       {
         type: Schema.Types.ObjectId,
         ref: 'Event',

@@ -173,6 +173,32 @@ router.get(
   })
 );
 
+// ─── GET /api/admin/events/delete-requests ─────────────────
+router.get(
+  '/events/delete-requests',
+  asyncWrapper(async (req: Request, res: Response) => {
+    const { page, limit, skip } = getPagination(req);
+    const filter = { 'deletionRequest.status': 'pending' };
+
+    const [events, total] = await Promise.all([
+      Event.find(filter)
+        .sort({ 'deletionRequest.requestedAt': -1, updatedAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .populate('organizer', 'name email avatar')
+        .lean(),
+      Event.countDocuments(filter),
+    ]);
+
+    ApiResponse.paginated(res, events, {
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit),
+    });
+  })
+);
+
 // ─── PATCH /api/admin/events/:id/approve ────────────────────
 router.patch(
   '/events/:id/request-proof',
@@ -238,6 +264,84 @@ router.patch(
   })
 );
 
+// ─── PATCH /api/admin/events/:id/approve-delete ────────────
+router.patch(
+  '/events/:id/approve-delete',
+  asyncWrapper(async (req: Request, res: Response) => {
+    const event = await Event.findById(req.params.id);
+    if (!event) {
+      ApiResponse.error(res, 404, 'EVENT_NOT_FOUND', 'Event not found');
+      return;
+    }
+
+    if (event.deletionRequest?.status !== 'pending') {
+      ApiResponse.error(res, 400, 'INVALID_DELETE_STATUS', 'No pending delete request for this event');
+      return;
+    }
+
+    const organizerId = event.organizer.toString();
+    const eventId = event._id.toString();
+    const title = event.title;
+
+    await Promise.all([
+      Event.deleteOne({ _id: event._id }),
+      User.updateOne({ _id: organizerId }, { $pull: { createdEvents: event._id } }),
+      User.updateMany({ joinedEvents: event._id }, { $pull: { joinedEvents: event._id } }),
+    ]);
+
+    await notificationService.createNotification(
+      organizerId,
+      'event_rejected',
+      '🗑️ Event Deleted by Admin',
+      `Your delete request for "${title}" has been approved. The event was removed.`,
+      { eventId, eventTitle: title }
+    );
+
+    ApiResponse.success(res, null, 'Delete request approved and event removed');
+  })
+);
+
+const rejectDeleteSchema = z.object({
+  adminNote: z.string().trim().min(3).max(300).optional(),
+});
+
+// ─── PATCH /api/admin/events/:id/reject-delete ─────────────
+router.patch(
+  '/events/:id/reject-delete',
+  asyncWrapper(async (req: Request, res: Response) => {
+    const { adminNote } = rejectDeleteSchema.parse(req.body ?? {});
+    const event = await Event.findById(req.params.id);
+    if (!event) {
+      ApiResponse.error(res, 404, 'EVENT_NOT_FOUND', 'Event not found');
+      return;
+    }
+
+    if (event.deletionRequest?.status !== 'pending') {
+      ApiResponse.error(res, 400, 'INVALID_DELETE_STATUS', 'No pending delete request for this event');
+      return;
+    }
+
+    event.deletionRequest = {
+      ...event.deletionRequest,
+      status: 'rejected',
+      reviewedAt: new Date(),
+      reviewedBy: req.user!._id,
+      adminNote: adminNote || 'Delete request rejected by admin',
+    } as any;
+    await event.save();
+
+    await notificationService.createNotification(
+      event.organizer.toString(),
+      'event_rejected',
+      '❌ Delete Request Rejected',
+      `Admin rejected delete request for "${event.title}".${adminNote ? ` Note: ${adminNote}` : ''}`,
+      { eventId: event._id.toString(), eventTitle: event.title, adminNote }
+    );
+
+    ApiResponse.success(res, event, 'Delete request rejected');
+  })
+);
+
 // ─── PATCH /api/admin/events/:id/reject ─────────────────────
 const rejectSchema = z.object({
   rejectionNote: z.string().min(1, 'Rejection note is required').max(500),
@@ -296,6 +400,84 @@ router.get(
       .sort({ createdAt: -1 })
       .lean();
     ApiResponse.success(res, users);
+  })
+);
+
+// ─── POST /api/admin/events/bulk ───────────────────────────────
+const bulkActionSchema = z.object({
+  eventIds: z.array(z.string()).min(1),
+  action: z.enum(['approve', 'reject']),
+  rejectionNote: z.string().optional(),
+}).strict();
+
+router.post(
+  '/events/bulk',
+  asyncWrapper(async (req: Request, res: Response) => {
+    const parseResult = bulkActionSchema.safeParse(req.body);
+    if (!parseResult.success) {
+      ApiResponse.error(res, 400, 'INVALID_DATA', parseResult.error.errors[0]?.message || 'Invalid data');
+      return;
+    }
+
+    const { eventIds, action, rejectionNote } = parseResult.data;
+    const objectIds = eventIds.map(id => new (require('mongoose').Types.ObjectId)(id));
+
+    if (action === 'approve') {
+      await Event.updateMany(
+        { _id: { $in: objectIds }, status: 'pending' },
+        { status: 'approved', isFlagged: false, flagReason: undefined }
+      );
+    } else if (action === 'reject') {
+      await Event.updateMany(
+        { _id: { $in: objectIds }, status: 'pending' },
+        { status: 'rejected', rejectionNote: rejectionNote || 'Rejected by admin' }
+      );
+    }
+
+    ApiResponse.success(res, { modifiedCount: eventIds.length }, `${eventIds.length} events ${action}d`);
+  })
+);
+
+// ─── GET /api/admin/analytics ───────────────────────────────────
+router.get(
+  '/analytics',
+  asyncWrapper(async (_req: Request, res: Response) => {
+    const [
+      totalEvents,
+      pendingEvents,
+      approvedEvents,
+      rejectedEvents,
+      totalUsers,
+      totalRsvps,
+    ] = await Promise.all([
+      Event.countDocuments(),
+      Event.countDocuments({ status: 'pending' }),
+      Event.countDocuments({ status: 'approved' }),
+      Event.countDocuments({ status: 'rejected' }),
+      User.countDocuments(),
+      Event.aggregate([
+        { $match: { status: 'approved' } },
+        { $project: { attendeeCount: { $size: '$attendees' } } },
+        { $group: { _id: null, total: { $sum: '$attendeeCount' } } }
+      ]),
+    ]);
+
+    const analytics = {
+      events: {
+        total: totalEvents,
+        pending: pendingEvents,
+        approved: approvedEvents,
+        rejected: rejectedEvents,
+      },
+      users: {
+        total: totalUsers,
+      },
+      rsvps: {
+        total: totalRsvps[0]?.total || 0,
+      },
+    };
+
+    ApiResponse.success(res, analytics);
   })
 );
 

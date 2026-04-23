@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, RefreshControl } from 'react-native';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import Icon from 'react-native-vector-icons/Feather';
+import Icon from '../../../shared/components/AppIcon';
 import { formatDistanceToNow } from 'date-fns';
 import { useNavigation } from '@react-navigation/native';
 
@@ -73,10 +73,7 @@ export default function NotificationsScreen({ adminTheme }: Props) {
     }
 
     if (!isAdmin && notification.type === 'event_flagged_info_request' && notification.data?.eventId) {
-      navigation.navigate('EventsTab', {
-        screen: 'SubmitAdditionalInfo',
-        params: { eventId: notification.data.eventId },
-      });
+      navigation.navigate('SubmitAdditionalInfo', { eventId: notification.data.eventId });
     }
   };
 

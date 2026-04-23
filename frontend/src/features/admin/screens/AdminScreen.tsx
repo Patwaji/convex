@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import FastImage from 'react-native-fast-image';
 import { format } from 'date-fns';
-import Icon from 'react-native-vector-icons/Feather';
+import Icon from '../../../shared/components/AppIcon';
 
 import { apiClient } from '../../../shared/api/client';
 import { useAuthStore } from '../../auth/store/authStore';
@@ -11,7 +11,7 @@ import { categoryThemes, getStylesForCategory } from '../../../shared/theme/cate
 import { EventCategory } from '../../events/types';
 import { triggerGlobalAlert } from '../../../shared/store/globalAlertStore';
 
-type FilterTab = 'pending' | 'approved' | 'rejected' | 'flagged';
+type FilterTab = 'pending' | 'approved' | 'rejected' | 'flagged' | 'delete_requests';
 
 type PaginatedResponse<T> = {
   items: T[];
@@ -92,6 +92,12 @@ export default function AdminScreen() {
     enabled: user?.role === 'admin' && activeTab === 'flagged',
   });
 
+  const { data: deleteRequestEvents, isLoading: loadingDeleteRequests } = useQuery({
+    queryKey: ['admin_events_delete_requests'],
+    queryFn: async () => fetchAdminEvents('/admin/events/delete-requests'),
+    enabled: user?.role === 'admin' && activeTab === 'delete_requests',
+  });
+
   const approveMutation = useMutation({
     mutationFn: async (id: string) => apiClient.patch(`/admin/events/${id}/approve`),
     onSuccess: () => {
@@ -137,6 +143,35 @@ export default function AdminScreen() {
     },
   });
 
+  const approveDeleteMutation = useMutation({
+    mutationFn: async (id: string) => apiClient.patch(`/admin/events/${id}/approve-delete`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin_events_delete_requests'] });
+      queryClient.invalidateQueries({ queryKey: ['admin_events_approved'] });
+      queryClient.invalidateQueries({ queryKey: ['events'] });
+      queryClient.invalidateQueries({ queryKey: ['my-events'] });
+      triggerGlobalAlert({
+        type: 'success',
+        title: '◆ DELETED',
+        message: 'Event deleted after admin approval.',
+      });
+    },
+  });
+
+  const rejectDeleteMutation = useMutation({
+    mutationFn: async (id: string) => apiClient.patch(`/admin/events/${id}/reject-delete`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin_events_delete_requests'] });
+      queryClient.invalidateQueries({ queryKey: ['admin_events_approved'] });
+      queryClient.invalidateQueries({ queryKey: ['events'] });
+      triggerGlobalAlert({
+        type: 'info',
+        title: '◇ REQUEST REJECTED',
+        message: 'Delete request was rejected and event remains active.',
+      });
+    },
+  });
+
   const handleReject = () => {
     if (!rejectModal.eventId || !selectedReason) return;
     let reason = customNote;
@@ -177,11 +212,12 @@ export default function AdminScreen() {
       case 'approved': return approvedEvents?.items || [];
       case 'rejected': return rejectedEvents?.items || [];
       case 'flagged': return flaggedEvents?.items || [];
+      case 'delete_requests': return deleteRequestEvents?.items || [];
       default: return [];
     }
   };
 
-  const isLoading = loadingPending || loadingApproved || loadingRejected || loadingFlagged;
+  const isLoading = loadingPending || loadingApproved || loadingRejected || loadingFlagged || loadingDeleteRequests;
   const data = getData();
 
   const pendingCount = pendingEvents?.pagination?.total || pendingEvents?.items?.length || 0;
@@ -299,6 +335,27 @@ export default function AdminScreen() {
             </TouchableOpacity>
           </View>
         )}
+
+        {activeTab === 'delete_requests' && (
+          <View style={styles.cardActions}>
+            <TouchableOpacity
+              style={[styles.actionButton, { backgroundColor: THEME.danger + '20', borderColor: THEME.danger }]}
+              onPress={() => approveDeleteMutation.mutate(item._id)}
+              disabled={approveDeleteMutation.isPending}
+            >
+              <Icon name="trash-2" size={14} color={THEME.danger} />
+              <Text style={[styles.actionText, { color: THEME.danger }]}>APPROVE DELETE</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.actionButton, { backgroundColor: THEME.success + '20', borderColor: THEME.success }]}
+              onPress={() => rejectDeleteMutation.mutate(item._id)}
+              disabled={rejectDeleteMutation.isPending}
+            >
+              <Icon name="corner-right-up" size={14} color={THEME.success} />
+              <Text style={[styles.actionText, { color: THEME.success }]}>KEEP EVENT</Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </TouchableOpacity>
     );
   };
@@ -351,6 +408,7 @@ export default function AdminScreen() {
             <TabButton tab="approved" label="Approved" color={THEME.success} />
             <TabButton tab="rejected" label="Rejected" color={THEME.textSecondary} />
             <TabButton tab="flagged" label="Flagged" count={flaggedEvents?.pagination?.total || flaggedEvents?.items?.length} color={THEME.warning} />
+            <TabButton tab="delete_requests" label="Delete Requests" count={deleteRequestEvents?.pagination?.total || deleteRequestEvents?.items?.length} color={THEME.danger} />
           </View>
         </ScrollView>
       </View>

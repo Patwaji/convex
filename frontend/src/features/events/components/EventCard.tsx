@@ -2,9 +2,9 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Dimensions } from 'react-native';
 import FastImage from 'react-native-fast-image';
 import { format } from 'date-fns';
-import Icon from 'react-native-vector-icons/Feather';
-import { Event, EventCategory } from '../types';
-import { categoryThemes, getStylesForCategory } from '../../../shared/theme/categoryThemes';
+import Icon from '../../../shared/components/AppIcon';
+import { Event } from '../types';
+import { categoryThemes, CATEGORY_COLORS } from '../../../shared/theme/categoryThemes';
 
 interface EventCardProps {
   event: Event;
@@ -12,18 +12,11 @@ interface EventCardProps {
 }
 
 const { width } = Dimensions.get('window');
+const CARD_RADIUS = 28;
 
 export const EventCard: React.FC<EventCardProps> = ({ event, onPress }) => {
-  const category = (event.category && categoryThemes[event.category as EventCategory]) 
-    ? (event.category as EventCategory) 
-    : 'other';
-    
-  const theme = categoryThemes[category];
-  const categoryStyles = getStylesForCategory(category);
-
-  const isTech = category === 'tech';
-  const isSports = category === 'sports';
-  const isArts = category === 'arts';
+  const theme = categoryThemes.other;
+  const categoryColor = CATEGORY_COLORS[(event.category as keyof typeof CATEGORY_COLORS) || 'other'] || categoryThemes.other.accent;
 
   return (
     <TouchableOpacity 
@@ -31,34 +24,13 @@ export const EventCard: React.FC<EventCardProps> = ({ event, onPress }) => {
       onPress={onPress}
       style={[
         styles.card, 
-        categoryStyles.card,
         { 
           backgroundColor: theme.surface,
-          borderRadius: theme.borderRadius,
+          borderRadius: CARD_RADIUS,
+          borderWidth: 1,
+          borderColor: theme.border.color,
           shadowColor: theme.shadow.color,
           elevation: theme.cardElevation,
-        },
-        isTech && {
-          borderWidth: 1,
-          borderColor: '#00F0FF33',
-          shadowColor: '#00F0FF',
-          shadowOffset: { width: 0, height: 0 },
-          shadowOpacity: 0.3,
-          shadowRadius: 12,
-          elevation: 0,
-        },
-        isSports && {
-          borderWidth: 2,
-          borderColor: '#FFD700',
-          shadowColor: '#FFD700',
-          shadowOffset: { width: 4, height: 4 },
-          shadowOpacity: 0.5,
-          shadowRadius: 0,
-          elevation: 0,
-        },
-        isArts && {
-          borderWidth: 1,
-          borderColor: '#D4AF3744',
         }
       ]}
     >
@@ -66,7 +38,7 @@ export const EventCard: React.FC<EventCardProps> = ({ event, onPress }) => {
         <FastImage
           style={[
             styles.image, 
-            { borderTopLeftRadius: theme.borderRadius, borderTopRightRadius: theme.borderRadius }
+            { borderTopLeftRadius: CARD_RADIUS, borderTopRightRadius: CARD_RADIUS }
           ]}
           source={{
             uri: event.coverImage || 'https://images.unsplash.com/photo-1501281668745-f7f57925c3b4?w=800&q=80',
@@ -74,26 +46,26 @@ export const EventCard: React.FC<EventCardProps> = ({ event, onPress }) => {
           }}
           resizeMode={FastImage.resizeMode.cover}
         />
-        {isTech && (
-          <View style={styles.techScanLine} />
-        )}
       </View>
       
       <View style={[
         styles.badge, 
-        categoryStyles.badge,
-        { backgroundColor: theme.accent }
+        { backgroundColor: categoryColor }
       ]}>
         <Text style={[
           styles.badgeText, 
-          { color: theme.accentText }
+          { color: '#FFFFFF' }
         ]}>
-          {isTech ? '< ' + category.toUpperCase() + ' >' : 
-           isSports ? '[ ' + category.toUpperCase() + ' ]' :
-           isArts ? category.toUpperCase() + ' ×' :
-           category.toUpperCase()}
+          {(event.category || 'other').toUpperCase()}
         </Text>
       </View>
+
+      {event.isRecommended && (
+        <View style={[styles.recommendedBadge, { backgroundColor: '#10B981' }]}>
+          <Icon name="star" size={10} color="#FFFFFF" />
+          <Text style={styles.recommendedText}>For You</Text>
+        </View>
+      )}
 
       <View style={styles.content}>
         <Text style={[styles.title, { color: theme.textPrimary }]} numberOfLines={2}>
@@ -105,11 +77,9 @@ export const EventCard: React.FC<EventCardProps> = ({ event, onPress }) => {
             name="calendar" 
             size={14} 
             color={theme.textSecondary}
-            style={isTech && categoryStyles.iconGlow} 
           />
           <Text style={[styles.dateText, { color: theme.textSecondary }]}>
-            {isTech ? format(new Date(event.date), 'yyyy-MM-dd HH:mm') : 
-             format(new Date(event.date), 'EEE, MMM d • h:mm a')}
+            {format(new Date(event.date), 'EEE, MMM d • h:mm a')}
           </Text>
         </View>
 
@@ -123,10 +93,7 @@ export const EventCard: React.FC<EventCardProps> = ({ event, onPress }) => {
         <View style={styles.footer}>
           <View style={styles.organizer}>
             <FastImage
-              style={[
-                styles.avatar,
-                isTech && { borderWidth: 1, borderColor: '#00F0FF44' }
-              ]}
+              style={styles.avatar}
               source={{
                 uri: event.organizer?.avatar || 'https://ui-avatars.com/api/?name=' + (event.organizer?.name || 'O') + '&background=random',
               }}
@@ -136,9 +103,8 @@ export const EventCard: React.FC<EventCardProps> = ({ event, onPress }) => {
             </Text>
           </View>
           
-          <Text style={[styles.price, { color: theme.accent }]}>
-            {isTech ? event.isFree ? '0x00' : `0x${event.ticketPrice}` :
-             event.isFree ? 'FREE' : `$${event.ticketPrice}`}
+          <Text style={[styles.price, { color: categoryColor }]}>
+            FREE
           </Text>
         </View>
       </View>
@@ -164,15 +130,6 @@ const styles = StyleSheet.create({
     height: 180,
     backgroundColor: '#E2E8F0',
   },
-  techScanLine: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 2,
-    backgroundColor: '#00F0FF',
-    opacity: 0.6,
-  },
   badge: {
     position: 'absolute',
     top: 16,
@@ -185,6 +142,23 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '800',
     letterSpacing: 1,
+    lineHeight: 14,
+  },
+  recommendedBadge: {
+    position: 'absolute',
+    top: 16,
+    right: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+  },
+  recommendedText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
   content: {
     padding: 16,

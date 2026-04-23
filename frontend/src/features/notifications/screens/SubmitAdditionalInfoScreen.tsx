@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import Icon from 'react-native-vector-icons/Feather';
+import Icon from '../../../shared/components/AppIcon';
 
 import { apiClient } from '../../../shared/api/client';
 import { useEventsStore } from '../../events/store/eventsStore';

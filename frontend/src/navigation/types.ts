@@ -9,8 +9,11 @@ export type AuthStackParamList = {
 export type EventsStackParamList = {
   EventList: undefined;
   EventDetail: { id: string, category?: string };
-  CreateEvent: undefined;
+  CreateEvent: { draftId?: string } | undefined;
   SubmitAdditionalInfo: { eventId: string };
+  JoinedEvents: undefined;
+  MyEvents: undefined;
+  EditProfile: undefined;
 };
 
 export type NotificationsStackParamList = {
@@ -19,17 +22,27 @@ export type NotificationsStackParamList = {
 };
 
 export type AppTabsParamList = {
-  EventsTab: NavigatorScreenParams<EventsStackParamList>;
-  Explore: undefined;
-  MyEvents: undefined;
+  Home: undefined;
+  Find: undefined;
   Notifications: undefined;
   Profile: undefined;
   Admin: undefined;
 };
 
+export type UserStackParamList = {
+  Tabs: NavigatorScreenParams<AppTabsParamList>;
+  EventList: undefined;
+  EventDetail: { id: string, category?: string };
+  CreateEvent: { draftId?: string } | undefined;
+  SubmitAdditionalInfo: { eventId: string };
+  JoinedEvents: undefined;
+  MyEvents: undefined;
+  EditProfile: undefined;
+};
+
 export type RootStackParamList = {
   Auth: NavigatorScreenParams<AuthStackParamList>;
-  App: NavigatorScreenParams<AppTabsParamList>;
+  App: NavigatorScreenParams<UserStackParamList>;
 };
 
 declare global {

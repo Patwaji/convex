@@ -1,4 +1,4 @@
-import { StyleSheet, ViewStyle, TextStyle } from 'react-native';
+import { StyleSheet } from 'react-native';
 
 export type EventCategory = 'tech' | 'corporate' | 'social' | 'sports' | 'arts' | 'education' | 'health' | 'other';
 
@@ -36,270 +36,94 @@ export type CategoryTheme = {
   iconSet: string;
 };
 
+export const CATEGORY_COLORS: Record<EventCategory, string> = {
+  tech: '#0891B2',
+  corporate: '#1D4ED8',
+  social: '#E11D48',
+  sports: '#B45309',
+  arts: '#A16207',
+  education: '#2563EB',
+  health: '#047857',
+  other: '#7C3AED',
+};
+
+export const getCategoryColor = (category: EventCategory): string => {
+  return CATEGORY_COLORS[category] || CATEGORY_COLORS.other;
+};
+
+export const PURPLE_THEME_BASE: Omit<CategoryTheme, 'name'> = {
+  background: '#F3F4F6',
+  surface: '#FFFFFF',
+  accent: '#8B5CF6',
+  accentText: '#FFFFFF',
+  textPrimary: '#1F2937',
+  textSecondary: '#6B7280',
+  borderRadius: 14,
+  cardElevation: 2,
+  fontFamily: {
+    title: 'System',
+    body: 'System',
+    mono: 'System',
+  },
+  glow: {
+    color: '#8B5CF6',
+    opacity: 0.1,
+    blur: 0,
+  },
+  border: {
+    width: 1,
+    color: '#E5E7EB',
+    style: 'solid',
+  },
+  shadow: {
+    color: '#000000',
+    opacity: 0.08,
+    offset: { x: 0, y: 2 },
+    radius: 8,
+  },
+  iconSet: 'Feather',
+};
+
 export const categoryThemes: Record<EventCategory, CategoryTheme> = {
   tech: {
     name: 'Tech',
-    background: '#000000',
-    surface: '#0A0A0A',
-    accent: '#00F0FF',
-    accentText: '#000000',
-    textPrimary: '#FFFFFF',
-    textSecondary: '#666666',
-    borderRadius: 0,
-    cardElevation: 0,
-    fontFamily: {
-      title: 'System',
-      body: 'System',
-      mono: 'System',
-    },
-    glow: {
-      color: '#00F0FF',
-      opacity: 0.8,
-      blur: 15,
-    },
-    border: {
-      width: 1,
-      color: '#00F0FF33',
-      style: 'solid',
-    },
-    shadow: {
-      color: '#00F0FF',
-      opacity: 0.5,
-      offset: { x: 0, y: 0 },
-      radius: 10,
-    },
-    iconSet: 'Feather',
+    ...PURPLE_THEME_BASE,
+    accent: CATEGORY_COLORS.tech,
   },
   corporate: {
     name: 'Corporate',
-    background: '#FAFBFC',
-    surface: '#FFFFFF',
-    accent: '#2563EB',
-    accentText: '#FFFFFF',
-    textPrimary: '#111827',
-    textSecondary: '#6B7280',
-    borderRadius: 6,
-    cardElevation: 2,
-    fontFamily: {
-      title: 'System',
-      body: 'System',
-      mono: 'System',
-    },
-    glow: {
-      color: '#2563EB',
-      opacity: 0.2,
-      blur: 8,
-    },
-    border: {
-      width: 1,
-      color: '#E5E7EB',
-      style: 'solid',
-    },
-    shadow: {
-      color: '#000000',
-      opacity: 0.06,
-      offset: { x: 0, y: 2 },
-      radius: 6,
-    },
-    iconSet: 'Feather',
+    ...PURPLE_THEME_BASE,
+    accent: CATEGORY_COLORS.corporate,
   },
   social: {
     name: 'Social',
-    background: '#1A1A2E',
-    surface: '#2D2D44',
-    accent: '#FF6B6B',
-    accentText: '#FFFFFF',
-    textPrimary: '#FFFFFF',
-    textSecondary: '#A0A0B0',
-    borderRadius: 24,
-    cardElevation: 4,
-    fontFamily: {
-      title: 'System',
-      body: 'System',
-      mono: 'System',
-    },
-    glow: {
-      color: '#FF6B6B',
-      opacity: 0.4,
-      blur: 15,
-    },
-    border: {
-      width: 1,
-      color: '#FF6B6B33',
-      style: 'solid',
-    },
-    shadow: {
-      color: '#FF6B6B',
-      opacity: 0.2,
-      offset: { x: 0, y: 6 },
-      radius: 16,
-    },
-    iconSet: 'Feather',
+    ...PURPLE_THEME_BASE,
+    accent: CATEGORY_COLORS.social,
   },
   sports: {
     name: 'Sports',
-    background: '#0A0A0A',
-    surface: '#1A1A1A',
-    accent: '#FFD700',
-    accentText: '#000000',
-    textPrimary: '#FFFFFF',
-    textSecondary: '#9CA3AF',
-    borderRadius: 0,
-    cardElevation: 0,
-    fontFamily: {
-      title: 'System',
-      body: 'System',
-      mono: 'System',
-    },
-    glow: {
-      color: '#FFD700',
-      opacity: 0.5,
-      blur: 10,
-    },
-    border: {
-      width: 2,
-      color: '#FFD700',
-      style: 'solid',
-    },
-    shadow: {
-      color: '#FFD700',
-      opacity: 0.4,
-      offset: { x: 4, y: 4 },
-      radius: 0,
-    },
-    iconSet: 'Feather',
+    ...PURPLE_THEME_BASE,
+    accent: CATEGORY_COLORS.sports,
   },
   arts: {
     name: 'Arts',
-    background: '#0D0D0D',
-    surface: '#141414',
-    accent: '#D4AF37',
-    accentText: '#1C1410',
-    textPrimary: '#FAF5F0',
-    textSecondary: '#A89580',
-    borderRadius: 2,
-    cardElevation: 0,
-    fontFamily: {
-      title: 'System',
-      body: 'System',
-      mono: 'System',
-    },
-    glow: {
-      color: '#D4AF37',
-      opacity: 0.3,
-      blur: 8,
-    },
-    border: {
-      width: 1,
-      color: '#D4AF3744',
-      style: 'solid',
-    },
-    shadow: {
-      color: '#D4AF37',
-      opacity: 0.2,
-      offset: { x: 2, y: 4 },
-      radius: 8,
-    },
-    iconSet: 'Feather',
+    ...PURPLE_THEME_BASE,
+    accent: CATEGORY_COLORS.arts,
   },
   education: {
     name: 'Education',
-    background: '#1A2744',
-    surface: '#243B61',
-    accent: '#3B82F6',
-    accentText: '#FFFFFF',
-    textPrimary: '#F8FAFC',
-    textSecondary: '#94A3B8',
-    borderRadius: 12,
-    cardElevation: 2,
-    fontFamily: {
-      title: 'System',
-      body: 'System',
-      mono: 'System',
-    },
-    glow: {
-      color: '#3B82F6',
-      opacity: 0.2,
-      blur: 0,
-    },
-    border: {
-      width: 1,
-      color: '#3B82F633',
-      style: 'solid',
-    },
-    shadow: {
-      color: '#3B82F6',
-      opacity: 0.1,
-      offset: { x: 0, y: 4 },
-      radius: 12,
-    },
-    iconSet: 'Feather',
+    ...PURPLE_THEME_BASE,
+    accent: CATEGORY_COLORS.education,
   },
   health: {
     name: 'Health',
-    background: '#E8F5F0',
-    surface: '#FFFFFF',
-    accent: '#10B981',
-    accentText: '#FFFFFF',
-    textPrimary: '#064E3B',
-    textSecondary: '#6B7280',
-    borderRadius: 20,
-    cardElevation: 3,
-    fontFamily: {
-      title: 'System',
-      body: 'System',
-      mono: 'System',
-    },
-    glow: {
-      color: '#10B981',
-      opacity: 0.3,
-      blur: 12,
-    },
-    border: {
-      width: 0,
-      color: '#10B98133',
-      style: 'solid',
-    },
-    shadow: {
-      color: '#10B981',
-      opacity: 0.15,
-      offset: { x: 0, y: 4 },
-      radius: 12,
-    },
-    iconSet: 'Feather',
+    ...PURPLE_THEME_BASE,
+    accent: CATEGORY_COLORS.health,
   },
   other: {
     name: 'Other',
-    background: '#F3F4F6',
-    surface: '#FFFFFF',
-    accent: '#8B5CF6',
-    accentText: '#FFFFFF',
-    textPrimary: '#1F2937',
-    textSecondary: '#6B7280',
-    borderRadius: 12,
-    cardElevation: 2,
-    fontFamily: {
-      title: 'System',
-      body: 'System',
-      mono: 'System',
-    },
-    glow: {
-      color: '#8B5CF6',
-      opacity: 0.2,
-      blur: 0,
-    },
-    border: {
-      width: 1,
-      color: '#E5E7EB',
-      style: 'solid',
-    },
-    shadow: {
-      color: '#000000',
-      opacity: 0.08,
-      offset: { x: 0, y: 2 },
-      radius: 8,
-    },
-    iconSet: 'Feather',
+    ...PURPLE_THEME_BASE,
+    accent: CATEGORY_COLORS.other,
   },
 };
 
@@ -402,29 +226,19 @@ export const getHealthStyles = () => StyleSheet.create({
 });
 
 export const getOtherStyles = () => StyleSheet.create({
-  container: { backgroundColor: '#F3F4F6' },
+  container: { backgroundColor: PURPLE_THEME_BASE.background },
   header: { backgroundColor: 'transparent' },
-  title: { color: '#1F2937', fontSize: 32, fontWeight: '700', letterSpacing: 0 },
-  pill: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E5E7EB' },
-  pillSelected: { backgroundColor: '#8B5CF6', borderColor: '#8B5CF6' },
-  card: { backgroundColor: '#FFFFFF', borderRadius: 12, borderWidth: 1, borderColor: '#E5E7EB' },
-  badge: { backgroundColor: '#8B5CF6', borderRadius: 6 },
-  createButton: { backgroundColor: '#8B5CF6', borderRadius: 12 },
-  createButtonText: { color: '#FFFFFF', fontWeight: '600', letterSpacing: 0.5 },
-  skeletonCard: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E5E7EB' },
-  iconGlow: { shadowColor: '#8B5CF6', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 4 },
+  title: { color: PURPLE_THEME_BASE.textPrimary, fontSize: 32, fontWeight: '700', letterSpacing: 0 },
+  pill: { backgroundColor: PURPLE_THEME_BASE.surface, borderWidth: 1, borderColor: PURPLE_THEME_BASE.border.color },
+  pillSelected: { backgroundColor: PURPLE_THEME_BASE.accent, borderColor: PURPLE_THEME_BASE.accent },
+  card: { backgroundColor: PURPLE_THEME_BASE.surface, borderRadius: 12, borderWidth: 1, borderColor: PURPLE_THEME_BASE.border.color },
+  badge: { backgroundColor: PURPLE_THEME_BASE.accent, borderRadius: 6 },
+  createButton: { backgroundColor: PURPLE_THEME_BASE.accent, borderRadius: 12 },
+  createButtonText: { color: PURPLE_THEME_BASE.accentText, fontWeight: '600', letterSpacing: 0.5 },
+  skeletonCard: { backgroundColor: PURPLE_THEME_BASE.surface, borderWidth: 1, borderColor: PURPLE_THEME_BASE.border.color },
+  iconGlow: { shadowColor: PURPLE_THEME_BASE.accent, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 4 },
 });
 
 export const getStylesForCategory = (category: EventCategory): ReturnType<typeof StyleSheet.create> => {
-  switch (category) {
-    case 'tech': return getTechStyles();
-    case 'corporate': return getCorporateStyles();
-    case 'social': return getSocialStyles();
-    case 'sports': return getSportsStyles();
-    case 'arts': return getArtsStyles();
-    case 'education': return getEducationStyles();
-    case 'health': return getHealthStyles();
-    case 'other': return getOtherStyles();
-    default: return getOtherStyles();
-  }
+  return getOtherStyles();
 };

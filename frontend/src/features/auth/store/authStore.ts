@@ -7,6 +7,9 @@ export interface User {
   email: string;
   role: 'user' | 'admin';
   avatar?: string;
+  gender?: 'male' | 'female' | 'other' | 'prefer_not_to_say';
+  dateOfBirth?: string;
+  hobbies?: string[];
   joinedEvents: any[];
   createdEvents: any[];
 }
@@ -18,6 +21,7 @@ interface AuthState {
   login: (user: User, accessToken: string, refreshToken: string) => Promise<void>;
   logout: () => Promise<void>;
   restoreSession: (user: User) => void;
+  updateUser: (user: Partial<User>) => void;
   setLoading: (loading: boolean) => void;
 }
 
@@ -40,6 +44,12 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   restoreSession: (user) => {
     set({ user, isAuthenticated: true, isLoading: false });
+  },
+
+  updateUser: (patch) => {
+    set((state) => ({
+      user: state.user ? { ...state.user, ...patch } : state.user,
+    }));
   },
 
   setLoading: (loading) => {

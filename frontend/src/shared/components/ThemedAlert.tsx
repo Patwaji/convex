@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Modal, Animated, Dimensions } from 'react-native';
-import Icon from 'react-native-vector-icons/Feather';
+import Icon from './AppIcon';
 import { categoryThemes, CategoryTheme } from '../../shared/theme/categoryThemes';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -249,6 +249,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     textAlign: 'center',
     marginBottom: 8,
+    lineHeight: 24,
   },
   message: {
     fontSize: 14,
@@ -270,6 +271,7 @@ const styles = StyleSheet.create({
   cancelText: {
     fontSize: 14,
     fontWeight: '600',
+    lineHeight: 18,
   },
   confirmBtn: {
     flex: 1,
@@ -280,6 +282,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: '#FFFFFF',
+    lineHeight: 18,
   },
   singleBtn: {
     width: '100%',

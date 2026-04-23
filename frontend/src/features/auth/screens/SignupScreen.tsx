@@ -127,6 +127,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     marginBottom: 12,
     letterSpacing: -1,
+    lineHeight: 48,
   },
   subtitle: {
     fontSize: 16,
@@ -146,9 +147,11 @@ const styles = StyleSheet.create({
   },
   footerText: {
     fontSize: 15,
+    lineHeight: 20,
   },
   link: {
     fontWeight: '700',
     fontSize: 15,
+    lineHeight: 20,
   },
 });

@@ -82,3 +82,31 @@ export function requireAdmin(
   }
   next();
 }
+
+/**
+ * Optionally attach user from token if provided; never blocks request.
+ */
+export async function optionalAuth(
+  req: Request,
+  _res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader?.startsWith('Bearer ')) {
+      next();
+      return;
+    }
+
+    const token = authHeader.split(' ')[1]!;
+    const decoded = jwt.verify(token, env.JWT_SECRET) as JwtPayload;
+    const user = await User.findById(decoded.userId);
+    if (user) {
+      req.user = user;
+    }
+  } catch {
+    // Ignore optional auth errors and continue as guest.
+  }
+
+  next();
+}

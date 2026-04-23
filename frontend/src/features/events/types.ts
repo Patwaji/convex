@@ -23,8 +23,6 @@ export interface Event {
     email?: string;
   };
   coverImage?: string;
-  ticketPrice: number;
-  isFree: boolean;
   status: 'pending' | 'approved' | 'rejected';
   maxAttendees?: number;
   attendeeCount: number;
@@ -32,11 +30,22 @@ export interface Event {
     _id: string;
     name?: string;
     avatar?: string;
+    verificationCode?: string;
+    verified?: boolean;
   }>;
   reportCount?: number;
   isFlagged?: boolean;
   flagReason?: string;
+  deletionRequest?: {
+    status: 'none' | 'pending' | 'rejected';
+    reason?: string;
+    requestedAt?: string;
+    reviewedAt?: string;
+    adminNote?: string;
+  };
+  myVerificationCode?: string;
   rejectionNote?: string;
+  isRecommended?: boolean;
   createdAt: string;
   updatedAt: string;
 }
