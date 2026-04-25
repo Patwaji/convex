@@ -6,9 +6,14 @@ Convex is a full-stack event discovery mobile application built with React Nativ
 
 - **Full Auth Flow:** JWT-based access and refresh tokens, persisted securely.
 - **Role-based Access:** Standard users and Admin users.
-- **Event Discovery:** Filter events by category and see dynamic themes.
-- **Geospatial Queries:** "Explore" feature uses MongoDB `2dsphere` index to fetch nearby events.
-- **Admin Workflow:** Users can create events that remain "pending" until an Admin approves or rejects them.
+- **Event Discovery:** Filter/search events by category with dynamic theming.
+- **Explore Search:** Nearby event discovery using MongoDB `2dsphere` with:
+  - current-location lookup
+  - city/location search
+  - selectable radius or city-wide scope
+- **Notifications UX:** In-app notifications with unread counts on bell icons and full-message detail modal.
+- **Admin Workflow:** User-created events enter moderation queue (approve/reject/request-more-proof).
+- **Organizer Tools:** RSVP join/leave, attendee verification codes, and delete-request flow for events.
 - **Capacity Management:** Real-time event joining with capacity caps.
 
 ## Technologies Used
@@ -33,7 +38,7 @@ Convex is a full-stack event discovery mobile application built with React Nativ
 ## Setup Instructions
 
 ### Prerequisites
-- Node.js (v18+)
+- Node.js (v22.11+ recommended; frontend uses `>=22.11.0`)
 - MongoDB connection string
 - React Native environment set up for Android/iOS
 
@@ -94,8 +99,8 @@ Convex is a full-stack event discovery mobile application built with React Nativ
    ```
 2. Build release APK:
    ```bash
-   cd frontend/android
-   ./gradlew assembleRelease
+   cd frontend
+   npm run android:assemble:release
    ```
 3. APK output path:
    ```bash

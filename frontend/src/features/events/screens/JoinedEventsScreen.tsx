@@ -1,9 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Modal, Dimensions, BackHandler } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
-import { useNavigation, CompositeNavigationProp } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
-import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import FastImage from 'react-native-fast-image';
 import { format } from 'date-fns';
 import Icon from '../../../shared/components/AppIcon';
@@ -40,13 +39,22 @@ export default function JoinedEventsScreen() {
   const theme = categoryThemes[activeCategory];
   const [selectedEvent, setSelectedEvent] = useState<JoinedEvent | null>(null);
 
-  useEffect(() => {
-    const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
-      navigation.navigate('Tabs', { screen: 'Profile' });
+  const handleBack = useCallback(() => {
+    if (navigation.canGoBack()) {
+      navigation.goBack();
       return true;
-    });
-    return () => backHandler.remove();
+    }
+
+    navigation.navigate('Tabs', { screen: 'Home' });
+    return true;
   }, [navigation]);
+
+  useFocusEffect(
+    useCallback(() => {
+      const backHandler = BackHandler.addEventListener('hardwareBackPress', handleBack);
+      return () => backHandler.remove();
+    }, [handleBack])
+  );
 
   const { data: events, isLoading, refetch, isRefetching } = useQuery({
     queryKey: ['joined-events'],
@@ -114,7 +122,7 @@ export default function JoinedEventsScreen() {
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.navigate('Tabs', { screen: 'Profile' })} style={styles.backBtn}>
+        <TouchableOpacity onPress={handleBack} style={styles.backBtn}>
           <Icon name="arrow-left" size={20} color={theme.textPrimary} />
         </TouchableOpacity>
         <View style={styles.titleSection}>

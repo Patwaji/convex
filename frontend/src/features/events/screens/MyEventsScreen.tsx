@@ -1,8 +1,7 @@
-import React, { useEffect } from 'react';
+import React, { useCallback } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, BackHandler } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
-import { useNavigation, CompositeNavigationProp } from '@react-navigation/native';
-import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import FastImage from 'react-native-fast-image';
 import { format } from 'date-fns';
@@ -24,13 +23,22 @@ export default function MyEventsScreen() {
   const categoryStyles = getStylesForCategory(activeCategory);
   const theme = categoryThemes[activeCategory];
 
-  useEffect(() => {
-    const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
-      navigation.navigate('Tabs', { screen: 'Profile' });
+  const handleBack = useCallback(() => {
+    if (navigation.canGoBack()) {
+      navigation.goBack();
       return true;
-    });
-    return () => backHandler.remove();
+    }
+
+    navigation.navigate('Tabs', { screen: 'Home' });
+    return true;
   }, [navigation]);
+
+  useFocusEffect(
+    useCallback(() => {
+      const backHandler = BackHandler.addEventListener('hardwareBackPress', handleBack);
+      return () => backHandler.remove();
+    }, [handleBack])
+  );
 
   const { data: events, isLoading } = useQuery({
     queryKey: ['my-events'],
@@ -88,7 +96,7 @@ export default function MyEventsScreen() {
   return (
     <View style={[styles.container, categoryStyles.container]}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.navigate('Tabs', { screen: 'Profile' })} style={styles.backBtn}>
+        <TouchableOpacity onPress={handleBack} style={styles.backBtn}>
           <Icon name="arrow-left" size={20} color={theme.textPrimary} />
         </TouchableOpacity>
         <Text style={[styles.title, categoryStyles.title]}>My Events</Text>
