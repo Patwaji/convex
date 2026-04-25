@@ -61,6 +61,7 @@ export default function ExploreScreen() {
   const [isSearchingLocation, setIsSearchingLocation] = useState(false);
   const [locationError, setLocationError] = useState('');
   const locationSearchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const locationInputRef = useRef<TextInput>(null);
 
   const effectiveRadius = scope === 'city' ? CITY_WIDE_RADIUS_METERS : radius;
 
@@ -159,7 +160,7 @@ export default function ExploreScreen() {
     }
 
     const query = locationQuery.trim();
-    if (query.length < 2) {
+    if (query.length < 1) {
       setLocationSuggestions([]);
       setIsSearchingLocation(false);
       return;
@@ -232,24 +233,23 @@ export default function ExploreScreen() {
     setLocationError('');
   };
 
-  const renderHeader = () => (
-    <View>
+  const clearLocationSearch = () => {
+    setLocationQuery('');
+    setLocationSuggestions([]);
+    setIsSearchingLocation(false);
+    setLocationError('');
+    requestAnimationFrame(() => {
+      locationInputRef.current?.focus();
+    });
+  };
+
+  const headerContent = (
+    <View style={styles.headerContent}>
       <View style={styles.header}>
         <Text style={[styles.title, categoryStyles.title]}>Find Nearby Events</Text>
         <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
           Search from your exact location, a custom place, or an entire city.
         </Text>
-      </View>
-
-      <View style={[styles.section, categoryStyles.card]}>
-        <Text style={[styles.label, { color: theme.textPrimary }]}>Event Search</Text>
-        <TextInput
-          style={[styles.input, { backgroundColor: theme.surface, color: theme.textPrimary, borderColor: theme.border.color }]}
-          placeholder="Search title, organizer, or venue"
-          placeholderTextColor={theme.textSecondary}
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-        />
       </View>
 
       <View style={[styles.section, categoryStyles.card]}>
@@ -260,13 +260,25 @@ export default function ExploreScreen() {
             <Text style={[styles.currentButtonText, { color: theme.accent }]}>Use Current</Text>
           </TouchableOpacity>
         </View>
-        <TextInput
-          style={[styles.input, { backgroundColor: theme.surface, color: theme.textPrimary, borderColor: theme.border.color }]}
-          placeholder="Search city or area"
-          placeholderTextColor={theme.textSecondary}
-          value={locationQuery}
-          onChangeText={setLocationQuery}
-        />
+        <View style={styles.locationInputRow}>
+          <TextInput
+            ref={locationInputRef}
+            style={[styles.input, styles.locationInput, { backgroundColor: theme.surface, color: theme.textPrimary, borderColor: theme.border.color }]}
+            placeholder="Search city or area"
+            placeholderTextColor={theme.textSecondary}
+            value={locationQuery}
+            onChangeText={setLocationQuery}
+            blurOnSubmit={false}
+          />
+          {locationQuery.length > 0 && (
+            <TouchableOpacity
+              style={[styles.clearButton, { borderColor: theme.border.color, backgroundColor: theme.surface }]}
+              onPress={clearLocationSearch}
+            >
+              <Icon name="x" size={16} color={theme.textSecondary} />
+            </TouchableOpacity>
+          )}
+        </View>
         {!!locationName && (
           <Text style={[styles.currentLocationText, { color: theme.textSecondary }]}>Center: {locationName}</Text>
         )}
@@ -370,7 +382,7 @@ export default function ExploreScreen() {
         <FlatList
           data={filteredEvents}
           keyExtractor={(item) => item._id}
-          ListHeaderComponent={renderHeader}
+          ListHeaderComponent={headerContent}
           contentContainerStyle={styles.content}
           renderItem={({ item }) => (
             <EventCard
@@ -389,6 +401,7 @@ export default function ExploreScreen() {
           refreshing={nearbyQuery.isRefetching}
           onRefresh={() => nearbyQuery.refetch()}
           showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
         />
       )}
     </View>
@@ -397,7 +410,8 @@ export default function ExploreScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  content: { padding: 20, paddingTop: 56, paddingBottom: 120 },
+  content: { paddingTop: 56, paddingBottom: 120 },
+  headerContent: { paddingHorizontal: 20 },
   header: { marginBottom: 16 },
   title: { fontSize: 32, fontWeight: '800' },
   subtitle: { fontSize: 14, marginTop: 6, lineHeight: 20 },
@@ -420,6 +434,22 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     paddingHorizontal: 12,
     fontSize: 15,
+  },
+  locationInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  locationInput: {
+    flex: 1,
+  },
+  clearButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   locationHeader: {
     flexDirection: 'row',
@@ -472,7 +502,7 @@ const styles = StyleSheet.create({
   },
   cityScopeHint: { fontSize: 13, lineHeight: 18 },
   resultsTitle: { fontSize: 18, fontWeight: '700', marginBottom: 16 },
-  resultsCard: { padding: 22, alignItems: 'center', borderWidth: 1, borderRadius: 12 },
+  resultsCard: { alignItems: 'center', borderWidth: 1, borderRadius: 12, marginHorizontal: 20, padding: 22 },
   emptyText: { fontSize: 14, textAlign: 'center', lineHeight: 20 },
   loaderWrap: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   loaderText: { marginTop: 10, fontSize: 13 },
