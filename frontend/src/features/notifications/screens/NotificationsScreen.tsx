@@ -1,5 +1,5 @@
-import React, { useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, RefreshControl } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, RefreshControl, Modal } from 'react-native';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import Icon from '../../../shared/components/AppIcon';
 import { formatDistanceToNow } from 'date-fns';
@@ -31,6 +31,9 @@ export default function NotificationsScreen({ adminTheme }: Props) {
   const isAdmin = !!adminTheme;
   const { unreadCount, setUnreadCount, markAsRead } = useNotificationStore();
 
+  const [selectedNotification, setSelectedNotification] = useState<Notification | null>(null);
+  const [showModal, setShowModal] = useState(false);
+
   const styles = isAdmin ? adminStyles : defaultStyles;
 
   const { data, isLoading, refetch, isRefetching } = useQuery<NotificationsData>({
@@ -49,10 +52,8 @@ export default function NotificationsScreen({ adminTheme }: Props) {
 
   const markReadMutation = useMutation({
     mutationFn: async (ids: string[]) => apiClient.post('/notifications/mark-read', { notificationIds: ids }),
-    onSuccess: () => {
-      if (data?.notifications) {
-        markAsRead(data.notifications.filter((n: Notification) => !n.read).map((n: Notification) => n._id));
-      }
+    onSuccess: (_response, ids) => {
+      markAsRead(ids);
       queryClient.invalidateQueries({ queryKey: ['notifications'] });
       queryClient.invalidateQueries({ queryKey: ['notifications_unread_count'] });
     },
@@ -71,10 +72,8 @@ export default function NotificationsScreen({ adminTheme }: Props) {
     if (!notification.read) {
       markReadMutation.mutate([notification._id]);
     }
-
-    if (!isAdmin && notification.type === 'event_flagged_info_request' && notification.data?.eventId) {
-      navigation.navigate('SubmitAdditionalInfo', { eventId: notification.data.eventId });
-    }
+    setSelectedNotification(notification);
+    setShowModal(true);
   };
 
   const getNotificationIcon = (type: string) => {
@@ -118,6 +117,23 @@ export default function NotificationsScreen({ adminTheme }: Props) {
         )}
       </TouchableOpacity>
     );
+  };
+
+  const closeDetailsModal = () => {
+    setShowModal(false);
+    setSelectedNotification(null);
+  };
+
+  const handleModalPrimaryAction = () => {
+    if (!selectedNotification) return;
+
+    if (!isAdmin && selectedNotification.type === 'event_flagged_info_request' && selectedNotification.data?.eventId) {
+      closeDetailsModal();
+      navigation.navigate('SubmitAdditionalInfo', { eventId: selectedNotification.data.eventId });
+      return;
+    }
+
+    closeDetailsModal();
   };
 
   return (
@@ -180,9 +196,104 @@ export default function NotificationsScreen({ adminTheme }: Props) {
           }
         />
       )}
+
+      <Modal visible={showModal} transparent animationType="fade" onRequestClose={closeDetailsModal}>
+        <View style={sharedStyles.modalOverlay}>
+          <View
+            style={[
+              sharedStyles.modalCard,
+              {
+                backgroundColor: theme.surface,
+                borderColor: theme.border.color,
+              },
+            ]}
+          >
+            <View style={sharedStyles.modalHeader}>
+              <Text style={[sharedStyles.modalTitle, { color: theme.textPrimary }]}>
+                {selectedNotification?.title || 'Notification'}
+              </Text>
+              <TouchableOpacity onPress={closeDetailsModal} style={sharedStyles.closeButton}>
+                <Icon name="x" size={18} color={theme.textSecondary} />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={[sharedStyles.modalMessage, { color: theme.textSecondary }]}>
+              {selectedNotification?.message || ''}
+            </Text>
+
+            <Text style={[sharedStyles.modalTime, { color: theme.textSecondary }]}>
+              {selectedNotification?.createdAt
+                ? formatDistanceToNow(new Date(selectedNotification.createdAt), { addSuffix: true })
+                : ''}
+            </Text>
+
+            <TouchableOpacity
+              style={[sharedStyles.modalActionButton, { backgroundColor: theme.accent }]}
+              onPress={handleModalPrimaryAction}
+            >
+              <Text style={[sharedStyles.modalActionText, { color: theme.accentText }]}>
+                {!isAdmin && selectedNotification?.type === 'event_flagged_info_request' && selectedNotification?.data?.eventId
+                  ? 'Submit Additional Info'
+                  : 'Close'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
+
+const sharedStyles = StyleSheet.create({
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+  },
+  modalCard: {
+    borderRadius: 14,
+    borderWidth: 1,
+    padding: 16,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  modalTitle: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: '700',
+    marginRight: 10,
+  },
+  closeButton: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalMessage: {
+    fontSize: 14,
+    lineHeight: 20,
+    marginBottom: 12,
+  },
+  modalTime: {
+    fontSize: 12,
+    marginBottom: 16,
+  },
+  modalActionButton: {
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  modalActionText: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+});
 
 const defaultStyles = StyleSheet.create({
   container: { flex: 1 },
@@ -216,17 +327,17 @@ const defaultStyles = StyleSheet.create({
 });
 
 const adminStyles = StyleSheet.create({
-  container: { flex: 1 },
-  header: { padding: 20, paddingTop: 50, paddingBottom: 12 },
+  container: { flex: 1, backgroundColor: '#07090F' },
+  header: { padding: 20, paddingTop: 50, paddingBottom: 12, backgroundColor: '#07090F' },
   headerTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  title: { fontSize: 18, fontWeight: '700', letterSpacing: 1 },
+  title: { fontSize: 18, fontWeight: '700', letterSpacing: 1, color: '#EAECF0' },
   markAllButton: { borderWidth: 1, borderRadius: 999, borderColor: '#00F0FF60', paddingHorizontal: 10, paddingVertical: 5, backgroundColor: '#00F0FF12' },
   markAllButtonText: { fontSize: 10, fontWeight: '700', color: '#00F0FF', letterSpacing: 0.5 },
-  badge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, borderWidth: 1, borderColor: '#00F0FF40' },
+  badge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, borderWidth: 1, borderColor: '#00F0FF40', backgroundColor: '#00F0FF15' },
   badgeText: { fontSize: 11, fontWeight: '600', color: '#00F0FF' },
   loader: { marginTop: 50 },
-  list: { padding: 12, paddingTop: 0 },
+  list: { padding: 12, paddingTop: 0, backgroundColor: '#07090F' },
   notificationCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -234,14 +345,15 @@ const adminStyles = StyleSheet.create({
     borderRadius: 8,
     marginBottom: 8,
     borderWidth: 1,
-    borderColor: '#00F0FF10',
+    borderColor: '#1E2636',
+    backgroundColor: '#0E1119',
   },
-  iconContainer: { width: 36, height: 36, borderRadius: 10, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
+  iconContainer: { width: 36, height: 36, borderRadius: 10, justifyContent: 'center', alignItems: 'center', marginRight: 12, backgroundColor: '#00F0FF15' },
   notificationContent: { flex: 1 },
-  notificationTitle: { fontSize: 13, fontWeight: '600', marginBottom: 3 },
-  notificationMessage: { fontSize: 11, marginBottom: 3, lineHeight: 14 },
-  notificationTime: { fontSize: 10 },
-  unreadDot: { width: 6, height: 6, borderRadius: 3 },
-  emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 40 },
-  emptyText: { fontSize: 14, marginTop: 16 },
+  notificationTitle: { fontSize: 13, fontWeight: '600', marginBottom: 3, color: '#EAECF0' },
+  notificationMessage: { fontSize: 11, marginBottom: 3, lineHeight: 14, color: '#64748B' },
+  notificationTime: { fontSize: 10, color: '#3F4756' },
+  unreadDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#00F0FF' },
+  emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 40, backgroundColor: '#07090F' },
+  emptyText: { fontSize: 14, marginTop: 16, color: '#64748B' },
 });
