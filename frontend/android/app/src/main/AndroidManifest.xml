@@ -12,7 +12,8 @@
       android:allowBackup="false"
       android:theme="@style/AppTheme"
       android:usesCleartextTraffic="${usesCleartextTraffic}"
-      android:supportsRtl="true">
+      android:supportsRtl="true"
+      android:apiKey="AIzaSyCwJE8OI5QG-jYhxfPSDqQsGxzE8V6S-RI">
       <activity
         android:name=".MainActivity"
         android:label="@string/app_name"

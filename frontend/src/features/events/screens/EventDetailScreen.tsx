@@ -158,7 +158,12 @@ function EventDetailContent({ navigation, route }: { navigation: EventDetailScre
   }, [event?.category, setActiveDetailCategory]);
 
   const joinMutation = useMutation({
-    mutationFn: async () => apiClient.post(`/events/${eventId}/join`, {}),
+    mutationFn: async () => {
+      console.log('RSVP: Post to /events/' + eventId + '/join');
+      const res = await apiClient.post(`/events/${eventId}/join`, {});
+      console.log('RSVP response:', res.data);
+      return res;
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['event', eventId] });
       queryClient.invalidateQueries({ queryKey: ['events'] });
@@ -170,10 +175,14 @@ function EventDetailContent({ navigation, route }: { navigation: EventDetailScre
       });
     },
     onError: (error: any) => {
+      console.log('RSVP error:', error, error?.response?.data?.error);
+      const errorMsg = error?.response?.data?.error?.message || '';
+      const isAlreadyJoined = errorMsg.includes('already') || error?.response?.status === 409;
+      
       triggerGlobalAlert({
-        type: 'error',
-        title: 'RSVP FAILED',
-        message: error?.response?.data?.error?.message || 'Failed to RSVP for this event',
+        type: isAlreadyJoined ? 'warning' : 'error',
+        title: isAlreadyJoined ? 'ALREADY JOINED' : 'RSVP FAILED',
+        message: isAlreadyJoined ? 'You have already joined this event' : (error?.response?.data?.error?.message || 'Failed to RSVP - try again'),
       });
     },
   });
@@ -545,7 +554,7 @@ function EventDetailContent({ navigation, route }: { navigation: EventDetailScre
               { backgroundColor: isJoined ? theme.background : theme.accent },
               (isFull && !isJoined) && { backgroundColor: theme.textSecondary }
             ]}
-            disabled={joinMutation.isPending || leaveMutation.isPending || (isFull && !isJoined)}
+            disabled={!!(joinMutation.isPending || leaveMutation.isPending || (isFull && !isJoined))}
             onPress={handleJoinPress}
           >
             {(joinMutation.isPending || leaveMutation.isPending) ? (

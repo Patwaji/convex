@@ -6,6 +6,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Icon from '../shared/components/AppIcon';
 import { CustomBottomTabBar } from '../shared/components/BottomNav';
+import { AdminBottomTabBar } from '../shared/components/AdminBottomNav';
 import { useQuery } from '@tanstack/react-query';
 
 import { AuthStackParamList, AppTabsParamList, RootStackParamList, UserStackParamList } from './types';
@@ -30,15 +31,30 @@ import AdminScreen from '../features/admin/screens/AdminScreen';
 import NotificationsScreen from '../features/notifications/screens/NotificationsScreen';
 import SubmitAdditionalInfoScreen from '../features/notifications/screens/SubmitAdditionalInfoScreen';
 
-const ADMIN_THEME: CategoryTheme = {
-  ...categoryThemes.other,
+export const ADMIN_DARK_THEME: CategoryTheme = {
   name: 'Admin',
-};
+  background: '#07090F',
+  surface: '#0E1119',
+  accent: '#00F0FF',
+  accentText: '#07090F',
+  textPrimary: '#EAECF0',
+  textSecondary: '#64748B',
+  borderRadius: 12,
+  cardElevation: 0,
+  fontFamily: { title: 'System', body: 'System', mono: 'System' },
+  glow: { color: '#00F0FF', opacity: 0, blur: 0 },
+  border: { width: 1, color: '#1E2636', style: 'solid' },
+  shadow: { color: '#000000', opacity: 0, offset: { x: 0, y: 0 }, radius: 0 },
+  iconSet: 'lucide',
+} as const;
+
+const ADMIN_THEME = ADMIN_DARK_THEME;
 
 const APP_THEME = categoryThemes.other;
 
 const AuthStack = createStackNavigator<AuthStackParamList>();
 const AppTabs = createBottomTabNavigator<AppTabsParamList>();
+const AdminStack = createStackNavigator();
 const UserStack = createStackNavigator<UserStackParamList>();
 const RootStack = createStackNavigator<RootStackParamList>();
 
@@ -85,19 +101,24 @@ const AdminNavigator = () => {
   const unreadCount = useNotificationStore((state) => state.unreadCount);
 
   return (
+    <AdminStack.Navigator screenOptions={{ headerShown: false, cardStyle: { backgroundColor: 'transparent' } }}>
+      <AdminStack.Screen name="AdminTabs" component={AdminTabsScreen} />
+      <AdminStack.Screen name="EditProfile" component={EditProfileScreen} />
+    </AdminStack.Navigator>
+  );
+};
+
+const AdminTabsScreen = () => {
+  const unreadCount = useNotificationStore((state) => state.unreadCount);
+
+  return (
     <AppTabs.Navigator
+      tabBar={(props) => <AdminBottomTabBar {...props} />}
       screenOptions={{
         tabBarActiveTintColor: ADMIN_THEME.accent,
         tabBarInactiveTintColor: ADMIN_THEME.textSecondary,
         headerShown: false,
-        tabBarStyle: {
-          backgroundColor: 'transparent',
-          borderTopWidth: 0,
-          height: 70,
-          paddingTop: 8,
-          paddingBottom: 8,
-        },
-        tabBarLabelStyle: { fontSize: 10, fontWeight: '600', letterSpacing: 1.5 },
+        tabBarStyle: { display: 'none' },
       }}
     >
       <AppTabs.Screen

@@ -32,7 +32,7 @@ export default function EditProfileScreen() {
 
   useEffect(() => {
     const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
-      navigation.navigate('Tabs', { screen: 'Profile' });
+      navigation.goBack();
       return true;
     });
     return () => backHandler.remove();
@@ -107,7 +107,7 @@ export default function EditProfileScreen() {
       <View style={styles.header}>
         <TouchableOpacity 
           onPress={() => {
-            navigation.navigate('Tabs', { screen: 'Profile' });
+            navigation.goBack();
           }} 
           style={styles.backBtn}
         >

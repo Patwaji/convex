@@ -12,7 +12,7 @@ interface EventCardProps {
 }
 
 const { width } = Dimensions.get('window');
-const CARD_RADIUS = 28;
+const CARD_RADIUS = 18;
 
 export const EventCard: React.FC<EventCardProps> = ({ event, onPress }) => {
   const theme = categoryThemes.other;
@@ -117,9 +117,9 @@ const styles = StyleSheet.create({
     width: width - 48,
     marginHorizontal: 24,
     marginBottom: 24,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0,
+    shadowRadius: 6,
     overflow: 'hidden',
   },
   imageContainer: {

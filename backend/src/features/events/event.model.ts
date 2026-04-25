@@ -142,8 +142,8 @@ const eventSchema = new Schema<IEvent>(
     },
     maxAttendees: {
       type: Number,
-      min: [1, 'Max attendees must be at least 1'],
-      default: undefined,
+      min: [0, 'Max attendees must be 0 or more'],
+      default: 0,
     },
     attendees: [
       {

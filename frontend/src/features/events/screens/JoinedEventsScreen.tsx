@@ -20,10 +20,16 @@ const { width } = Dimensions.get('window');
 
 interface JoinedEvent {
   _id: string;
-  event: any;
+  event?: any;
   verificationCode?: string;
-  status: string;
-  createdAt: string;
+  status?: string;
+  createdAt?: string;
+
+  title?: string;
+  category?: string;
+  date?: string;
+  coverImage?: string;
+  venue?: any;
 }
 
 export default function JoinedEventsScreen() {
@@ -42,7 +48,7 @@ export default function JoinedEventsScreen() {
     return () => backHandler.remove();
   }, [navigation]);
 
-  const { data: events, isLoading } = useQuery({
+  const { data: events, isLoading, refetch, isRefetching } = useQuery({
     queryKey: ['joined-events'],
     queryFn: async () => {
       const res = await apiClient.get('/events/joined');
@@ -51,8 +57,8 @@ export default function JoinedEventsScreen() {
   });
 
   const renderEventCard = ({ item }: { item: JoinedEvent }) => {
-    const event = item.event;
-    if (!event) return null;
+    const event = item.event || item;
+    if (!event || !event._id) return null;
 
     const eventCategory = (event.category || 'other') as EventCategory;
     const eventTheme = categoryThemes[eventCategory];
@@ -138,6 +144,8 @@ export default function JoinedEventsScreen() {
           renderItem={renderEventCard}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
+          onRefresh={refetch}
+          refreshing={isRefetching}
         />
       )}
 
@@ -148,7 +156,7 @@ export default function JoinedEventsScreen() {
               <Icon name="x" size={20} color={theme.textPrimary} />
             </TouchableOpacity>
             <Text style={[styles.modalTitle, { color: theme.textPrimary }]}>
-              {selectedEvent?.event?.title}
+              {selectedEvent?.event?.title || selectedEvent?.title}
             </Text>
             <View style={[styles.qrCode, { backgroundColor: '#FFFFFF' }]}>
               <Text style={styles.qrCodeText}>{selectedEvent?.verificationCode}</Text>

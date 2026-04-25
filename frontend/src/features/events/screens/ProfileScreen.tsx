@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Modal, TextInput, Platform, Alert } from 'react-native';
-import { useNavigation, CompositeNavigationProp } from '@react-navigation/native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, TextInput, Modal, Alert, Image, Platform, Dimensions } from 'react-native';
+import { CompositeNavigationProp, useNavigation } from '@react-navigation/native';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { StackNavigationProp } from '@react-navigation/stack';
-import { format } from 'date-fns';
-import FastImage from 'react-native-fast-image';
 import * as ImagePicker from 'react-native-image-picker';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
+import { format } from 'date-fns';
+import FastImage from 'react-native-fast-image';
 import { useAuthStore } from '../../auth/store/authStore';
 import { useEventsStore } from '../store/eventsStore';
 import { categoryThemes, CategoryTheme } from '../../../shared/theme/categoryThemes';
@@ -154,11 +154,61 @@ export default function ProfileScreen({ adminTheme }: Props) {
     }
   };
 
-  const items = [
+  const adminMenuItems: typeof userMenuItems = [];
+
+  const userMenuItems = [
     { icon: 'user', title: 'Edit Profile', subtitle: 'Update name, gender & DOB', action: 'edit' },
     { icon: 'bookmark', title: 'My Saved', subtitle: 'Open your saved and created events', action: 'saved' },
     { icon: 'calendar', title: 'My RSVPs', subtitle: 'View your joined events & codes', action: 'rsvps' },
   ];
+
+  const items = isAdmin ? adminMenuItems : userMenuItems;
+
+  if (isAdmin) {
+    return (
+      <View style={[styles.container, { backgroundColor: theme.background }]}>
+        <ScrollView contentContainerStyle={styles.contentContainer}>
+          <View style={[styles.headerRow, { paddingTop: 50 }]}>
+            <Text style={[styles.title, { color: theme.textPrimary }]}>ADMIN PROFILE</Text>
+            <Text style={[styles.subtitle, { color: theme.textSecondary }]}>// COMMAND CENTER</Text>
+          </View>
+
+          <View style={[styles.profileCard, { backgroundColor: theme.surface, borderColor: theme.border.color }]}>
+            <View style={[styles.avatarSection, { marginBottom: 16 }]}>
+              {user?.avatar ? (
+                <FastImage source={{ uri: user.avatar }} style={styles.avatar} />
+              ) : (
+                <View style={[styles.avatarPlaceholder, { backgroundColor: theme.accent }]}>
+                  <Text style={styles.avatarPlaceholderText}>
+                    {user?.name?.charAt(0)?.toUpperCase() || 'A'}
+                  </Text>
+                </View>
+              )}
+            </View>
+            <Text style={[styles.userName, { color: theme.textPrimary }]}>{user?.name}</Text>
+            <Text style={[styles.userEmail, { color: theme.textSecondary, marginBottom: 16 }]}>{user?.email}</Text>
+            <View style={[styles.roleBadge, { backgroundColor: theme.accent + '20', borderColor: theme.accent }]}>
+              <Text style={[styles.roleText, { color: theme.accent }]}>ADMIN</Text>
+            </View>
+          </View>
+
+          <TouchableOpacity 
+            style={[styles.logoutButton, { backgroundColor: theme.surface, borderColor: '#EF4444' }]} 
+            onPress={() => {
+              Alert.alert('Logout', 'Are you sure you want to logout?', [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Logout', style: 'destructive', onPress: logout },
+              ]);
+            }}
+          >
+            <View style={styles.logoutContent}>
+              <Text style={[styles.logoutText, { color: '#EF4444' }]}>Logout</Text>
+            </View>
+          </TouchableOpacity>
+        </ScrollView>
+      </View>
+    );
+  }
 
   return (
     <ScrollView style={[styles.container, { backgroundColor: theme.background }]} contentContainerStyle={styles.contentContainer}>
@@ -167,7 +217,7 @@ export default function ProfileScreen({ adminTheme }: Props) {
       </View>
 
       <View style={[styles.profileCard, { backgroundColor: theme.surface, borderColor: theme.border.color }]}>
-        <TouchableOpacity style={styles.avatarSection} onPress={handleAvatarPick} disabled={isUploadingAvatar}>
+        <TouchableOpacity style={styles.avatarSection} onPress={handleAvatarPick} disabled={!!isUploadingAvatar}>
           {avatarPreview || user?.avatar ? (
             <FastImage source={{ uri: avatarPreview || user?.avatar }} style={styles.avatar} />
           ) : (
@@ -207,6 +257,8 @@ export default function ProfileScreen({ adminTheme }: Props) {
                 navigation.navigate('MyEvents');
               } else if (item.action === 'edit') {
                 navigation.navigate('EditProfile');
+              } else if (item.action === 'admin') {
+                (navigation as any).navigate('Admin');
               }
             }}
             disabled={!item.action}
@@ -336,6 +388,7 @@ const styles = StyleSheet.create({
   contentContainer: { padding: 20, paddingBottom: 100 },
   headerRow: { paddingTop: 52, marginBottom: 20 },
   title: { fontSize: 32, fontWeight: '800' },
+  subtitle: { fontSize: 10, letterSpacing: 1, marginTop: 4 },
   profileCard: {
     borderRadius: 20,
     padding: 20,
@@ -362,6 +415,8 @@ const styles = StyleSheet.create({
   statItem: { alignItems: 'center' },
   statNumber: { fontSize: 20, fontWeight: '700' },
   statLabel: { fontSize: 12 },
+  roleBadge: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, borderWidth: 1 },
+  roleText: { fontSize: 11, fontWeight: '700', letterSpacing: 1 },
   menuList: { gap: 10, marginTop: 24 },
   menuRow: {
     flexDirection: 'row',

@@ -1,9 +1,10 @@
 import React from 'react';
-import { View, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Text } from 'react-native';
 import { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from './AppIcon';
 import { PURPLE_THEME_BASE } from '../theme/categoryThemes';
+import { useNotificationStore } from '../../features/notifications/store/notificationStore';
 
 const { accent, surface, textSecondary } = PURPLE_THEME_BASE;
 
@@ -16,6 +17,7 @@ const TAB_ICONS: Record<string, string> = {
 
 export function CustomBottomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
+  const unreadCount = useNotificationStore((s) => s.unreadCount);
   
   return (
     <View style={[styles.container, { paddingBottom: insets.bottom + 10 }]}>
@@ -36,6 +38,7 @@ export function CustomBottomTabBar({ state, descriptors, navigation }: BottomTab
           };
           
           const iconName = TAB_ICONS[route.name] || 'circle';
+          const showBadge = route.name === 'Notifications' && unreadCount > 0;
             
           return (
             <TouchableOpacity 
@@ -44,7 +47,14 @@ export function CustomBottomTabBar({ state, descriptors, navigation }: BottomTab
               onPress={onPress}
               activeOpacity={0.7}
             >
-              <Icon name={iconName} size={22} color={isFocused ? accent : textSecondary} />
+              <View style={styles.iconContainer}>
+                <Icon name={iconName} size={22} color={isFocused ? accent : textSecondary} />
+                {showBadge && (
+                  <View style={styles.badge}>
+                    <Text style={styles.badgeText}>{unreadCount > 99 ? '99+' : unreadCount}</Text>
+                  </View>
+                )}
+              </View>
             </TouchableOpacity>
           );
         })}
@@ -78,5 +88,25 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  iconContainer: {
+    position: 'relative',
+  },
+  badge: {
+    position: 'absolute',
+    top: -6,
+    right: -10,
+    backgroundColor: '#ff3b30',
+    borderRadius: 10,
+    minWidth: 18,
+    height: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+  },
+  badgeText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: 'bold',
   },
 });

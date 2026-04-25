@@ -417,54 +417,43 @@ export async function joinEvent(eventId: string, userId: string) {
     throw error;
   }
 
-  if ((preEvent.attendees || []).some((a: any) => a.toString() === userId)) {
-    const error = new Error('You have already joined this event') as any;
-    error.statusCode = 409;
-    error.code = 'ALREADY_JOINED';
-    throw error;
+  const isAlreadyJoined = (preEvent.attendees || []).some((a: any) => {
+  const attendeeStr = a?.toString?.() || String(a || '');
+  const matches = attendeeStr === userId;
+  if (matches) {
+    console.log('DETECTED: Already joined - attendee:', attendeeStr, '=== userId:', userId);
   }
+  return matches;
+});
 
-  const update: any = {
+if (isAlreadyJoined) {
+  const error = new Error('You have already joined this event') as any;
+  error.statusCode = 409;
+  error.code = 'ALREADY_JOINED';
+  throw error;
+}
+
+// Simple approach - just add directly
+const updatedEvent = await Event.findByIdAndUpdate(
+  eventId,
+  {
     $addToSet: { attendees: userObjId },
-  };
-  update.$push = {
-    paidRsvps: {
-      attendee: userObjId,
-      verificationCode: createVerificationCode(userId, eventId),
-      verified: false,
-      createdAt: new Date(),
-    },
-  };
-
-  const updatedEvent = await Event.findOneAndUpdate(
-    {
-      _id: eventId,
-      status: 'approved',
-      attendees: { $ne: userObjId },
-      $expr: {
-        $or: [
-          { $eq: ['$maxAttendees', null] },
-          { $lt: [{ $size: '$attendees' }, '$maxAttendees'] },
-        ],
+    $push: {
+      paidRsvps: {
+        attendee: userObjId,
+        verificationCode: createVerificationCode(userId, eventId),
+        verified: false,
+        createdAt: new Date(),
       },
     },
-    update,
-    { new: true }
-  );
+  },
+  { new: true }
+);
 
   if (!updatedEvent) {
-    const event = preEvent;
-
-    if (!event) {
-      const error = new Error('Event not found') as any;
-      error.statusCode = 404;
-      error.code = 'EVENT_NOT_FOUND';
-      throw error;
-    }
-
-    const error = new Error('Event is full - maximum attendees reached') as any;
-    error.statusCode = 409;
-    error.code = 'EVENT_FULL';
+    const error = new Error('Event not found') as any;
+    error.statusCode = 404;
+    error.code = 'EVENT_NOT_FOUND';
     throw error;
   }
 
@@ -600,11 +589,15 @@ export async function getMyDraftEvents(userId: string) {
  * Get events the current user has joined.
  */
 export async function getMyJoinedEvents(userId: string) {
+  console.log('getMyJoinedEvents called with userId:', userId);
   await cleanupExpiredEventsIfNeeded();
-  const events = await Event.find({ attendees: userId, status: 'approved' })
+  const userObjId = new mongoose.Types.ObjectId(userId);
+  console.log('userObjId:', userObjId);
+  const events = await Event.find({ attendees: userObjId, status: 'approved' })
     .sort({ date: -1 })
     .populate('organizer', 'name avatar')
     .lean();
+  console.log('Found events:', events.length);
 
   return events.map(toEventSummary);
 }

@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, TextInput, Dimensions, ActivityIndicator, Modal, PermissionsAndroid, Alert, Linking } from 'react-native';
+import LinearGradient from 'react-native-linear-gradient';
 import { StackNavigationProp } from '@react-navigation/stack';
 import * as ImagePicker from 'react-native-image-picker';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -7,15 +8,16 @@ import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/dat
 import { format } from 'date-fns';
 import Icon from '../../../shared/components/AppIcon';
 import FastImage from 'react-native-fast-image';
-import { WebView, WebViewMessageEvent } from 'react-native-webview';
 import GetLocation from 'react-native-get-location';
+import { WebView, WebViewMessageEvent } from 'react-native-webview';
 
 import { EventsStackParamList } from '../../../navigation/types';
 import { apiClient } from '../../../shared/api/client';
 import { useEventsStore } from '../store/eventsStore';
-import { getStylesForCategory, categoryThemes } from '../../../shared/theme/categoryThemes';
+import { getStylesForCategory, getCategoryColor, categoryThemes } from '../../../shared/theme/categoryThemes';
 import { EventCategory } from '../types';
 import ThemedAlert from '../../../shared/components/ThemedAlert';
+import CategoryPattern, { Category } from '../../../shared/components/CategoryPattern';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -102,7 +104,6 @@ export default function CreateEventScreen({ navigation }: Props) {
   const [mapSearchNoResults, setMapSearchNoResults] = useState(false);
   const [isSearchingMap, setIsSearchingMap] = useState(false);
   const [isLocatingCurrent, setIsLocatingCurrent] = useState(false);
-  const [mapWebViewNonce, setMapWebViewNonce] = useState(0);
   const [mapPickedSuggestion, setMapPickedSuggestion] = useState<AddressSuggestion | null>(null);
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [selectedImage, setSelectedImage] = useState<SelectedImage | null>(null);
@@ -137,9 +138,29 @@ export default function CreateEventScreen({ navigation }: Props) {
     return unique;
   };
 
+  const LOCATIONIQ_KEY = 'pk.993766f4473223d1068bd9852371e8b9';
+
   const fetchPlaceSuggestions = async (query: string, limit: number): Promise<AddressSuggestion[]> => {
+    const locationIqUrl = `https://us1.locationiq.com/v1/search?key=${LOCATIONIQ_KEY}&q=${encodeURIComponent(query)}&format=json&limit=${limit}`;
     const photonUrl = `https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&limit=${limit}`;
     const nominatimUrl = `https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&limit=${limit}&q=${encodeURIComponent(query)}`;
+
+    let locationIqResults: AddressSuggestion[] = [];
+    try {
+      const locationIqResp = await fetch(locationIqUrl);
+      const locationIqData = await locationIqResp.json();
+      locationIqResults = Array.isArray(locationIqData)
+        ? locationIqData.map((item: any) => ({
+            displayName: item.display_name,
+            address: item.display_name,
+            city: item.address?.city || item.address?.county || item.address?.state || '',
+            lat: Number(item.lat),
+            lng: Number(item.lon),
+          }))
+        : [];
+    } catch {
+      locationIqResults = [];
+    }
 
     let photonResults: AddressSuggestion[] = [];
     try {
@@ -198,7 +219,7 @@ export default function CreateEventScreen({ navigation }: Props) {
       nominatimResults = [];
     }
 
-    return mergeAndUniqueSuggestions([...photonResults, ...nominatimResults]).slice(0, limit);
+    return mergeAndUniqueSuggestions([...locationIqResults, ...photonResults, ...nominatimResults]).slice(0, limit);
   };
 
   useEffect(() => {
@@ -276,6 +297,55 @@ export default function CreateEventScreen({ navigation }: Props) {
       lat: latitude,
       lng: longitude,
     };
+  };
+
+  const getOpenStreetMapHtml = (center: Coordinate, pin: Coordinate | null) => {
+    const pinScript = pin
+      ? `L.marker([${pin.latitude}, ${pin.longitude}]).addTo(map);`
+      : '';
+
+    return `
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>html, body, #map { height: 100%; width: 100%; margin: 0; padding: 0; }</style>
+  </head>
+  <body>
+    <div id="map"></div>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+      const map = L.map('map').setView([${center.latitude}, ${center.longitude}], 13);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '&copy; OpenStreetMap' }).addTo(map);
+      ${pinScript}
+      let marker = null;
+      map.on('click', function (e) {
+        if (marker) { map.removeLayer(marker); }
+        marker = L.marker(e.latlng).addTo(map);
+        window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'pick', latitude: e.latlng.lat, longitude: e.latlng.lng }));
+      });
+    </script>
+  </body>
+</html>`;
+  };
+
+  const onMapMessage = (event: WebViewMessageEvent) => {
+    try {
+      const payload = JSON.parse(event.nativeEvent.data || '{}');
+      if (payload.type !== 'pick') return;
+
+      const latitude = Number(payload.latitude);
+      const longitude = Number(payload.longitude);
+      if (Number.isNaN(latitude) || Number.isNaN(longitude)) return;
+
+      setMapPin({ latitude, longitude });
+      setMapCenter({ latitude, longitude });
+      setMapPickedSuggestion(null);
+    } catch {
+      // Ignore malformed bridge messages from web map.
+    }
   };
 
   const requestLocationPermissionIfNeeded = async (): Promise<LocationAccess> => {
@@ -454,81 +524,6 @@ export default function CreateEventScreen({ navigation }: Props) {
     }
   };
 
-  const getOpenStreetMapHtml = (center: Coordinate, pin: Coordinate | null) => {
-    const pinScript = pin
-      ? `L.marker([${pin.latitude}, ${pin.longitude}]).addTo(map);`
-      : '';
-
-    return `
-<!DOCTYPE html>
-<html>
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <link
-      rel="stylesheet"
-      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
-      crossorigin=""
-    />
-    <style>
-      html, body, #map { height: 100%; width: 100%; margin: 0; padding: 0; }
-    </style>
-  </head>
-  <body>
-    <div id="map"></div>
-    <script
-      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
-      crossorigin=""
-    ></script>
-    <script>
-      const map = L.map('map').setView([${center.latitude}, ${center.longitude}], 13);
-
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        maxZoom: 19,
-        attribution: '&copy; OpenStreetMap contributors'
-      }).addTo(map);
-
-      ${pinScript}
-
-      let marker = null;
-
-      map.on('click', function (e) {
-        if (marker) {
-          map.removeLayer(marker);
-        }
-        marker = L.marker(e.latlng).addTo(map);
-        window.ReactNativeWebView.postMessage(
-          JSON.stringify({
-            type: 'pick',
-            latitude: e.latlng.lat,
-            longitude: e.latlng.lng,
-          })
-        );
-      });
-    </script>
-  </body>
-</html>`;
-  };
-
-  const onMapMessage = (event: WebViewMessageEvent) => {
-    try {
-      const payload = JSON.parse(event.nativeEvent.data || '{}');
-      if (payload.type !== 'pick') return;
-
-      const latitude = Number(payload.latitude);
-      const longitude = Number(payload.longitude);
-      if (Number.isNaN(latitude) || Number.isNaN(longitude)) return;
-
-      setMapPin({ latitude, longitude });
-      setMapCenter({ latitude, longitude });
-      setMapPickedSuggestion(null);
-    } catch {
-      // Ignore malformed bridge messages from web map.
-    }
-  };
-
   useEffect(() => {
     if (!showMapPicker) return;
 
@@ -577,7 +572,6 @@ export default function CreateEventScreen({ navigation }: Props) {
     setMapCenter({ latitude: item.lat, longitude: item.lng });
     setMapPin({ latitude: item.lat, longitude: item.lng });
     setMapPickedSuggestion(item);
-    setMapWebViewNonce((n) => n + 1);
   };
 
   const confirmMapLocation = async () => {
@@ -647,6 +641,7 @@ export default function CreateEventScreen({ navigation }: Props) {
 
   const createMutation = useMutation({
     mutationFn: async (data: any) => {
+      console.log('Creating event with data:', JSON.stringify(data, null, 2));
       const { imageFile, ...eventPayload } = data;
       let coverImageUrl: string | undefined;
 
@@ -685,11 +680,21 @@ export default function CreateEventScreen({ navigation }: Props) {
       });
     },
     onError: (error: any) => {
+      const errorData = error?.response?.data;
+      const errorMsg = errorData?.error?.message || '';
+      
+      let displayMsg = 'Failed to create event';
+      if (errorMsg.includes('token') || errorMsg.includes('Token')) {
+        displayMsg = 'Please login again to create an event';
+      } else if (errorMsg) {
+        displayMsg = errorMsg;
+      }
+      
       setAlertState({
         visible: true,
         type: 'error',
         title: '◆ ERROR',
-        message: error.response?.data?.error?.message || 'Failed to create event',
+        message: displayMsg,
       });
     }
   });
@@ -762,8 +767,19 @@ export default function CreateEventScreen({ navigation }: Props) {
     });
   };
 
+  const categoryColor = getCategoryColor(activeCategory);
+
   return (
-    <ScrollView style={[styles.container, categoryStyles.container]} contentContainerStyle={styles.content}>
+    <View style={[styles.container, categoryStyles.container]}>
+      <LinearGradient
+        colors={[categoryColor, '#FFFFFF']}
+        style={StyleSheet.absoluteFill}
+        start={{ x: 0.5, y: 0 }}
+        end={{ x: 0.5, y: 0.4 }}
+      >
+        <CategoryPattern category={category as Category} width={SCREEN_WIDTH} height={400} opacity={0.2} />
+      </LinearGradient>
+      <ScrollView contentContainerStyle={styles.content}>
       <View style={styles.headerRow}>
         <Text style={[styles.headerTitle, categoryStyles.title]}>{getFieldLabel('submit').split(' ')[0]}</Text>
         <TouchableOpacity onPress={() => navigation.goBack()}>
@@ -919,7 +935,11 @@ export default function CreateEventScreen({ navigation }: Props) {
         </View>
 
         <TouchableOpacity style={[styles.submitBtn, categoryStyles.createButton]} onPress={handleCreate} disabled={createMutation.isPending}>
-          <Text style={[styles.submitText, categoryStyles.createButtonText]}>{getFieldLabel('submit')}</Text>
+          {createMutation.isPending ? (
+            <ActivityIndicator size="small" color="#fff" />
+          ) : (
+            <Text style={[styles.submitText, categoryStyles.createButtonText]}>{getFieldLabel('submit')}</Text>
+          )}
         </TouchableOpacity>
       </View>
 
@@ -987,7 +1007,6 @@ export default function CreateEventScreen({ navigation }: Props) {
           </View>
 
           <WebView
-            key={`osm-${mapWebViewNonce}`}
             style={styles.mapView}
             originWhitelist={["*"]}
             javaScriptEnabled
@@ -1013,6 +1032,7 @@ export default function CreateEventScreen({ navigation }: Props) {
         </View>
       </Modal>
     </ScrollView>
+    </View>
   );
 }
 
