@@ -6,6 +6,7 @@ import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { useQuery } from '@tanstack/react-query';
 import Icon from '../../../shared/components/AppIcon';
+import { EventListSkeleton } from '../../../shared/components/Skeleton';
 import { apiClient } from '../../../shared/api/client';
 import { AppTabsParamList, UserStackParamList } from '../../../navigation/types';
 import { useEventsStore } from '../../events/store/eventsStore';
@@ -35,7 +36,7 @@ export default function HomeScreen() {
 
   const categoryAccent = CATEGORY_COLORS[(filterCategory === 'all' ? 'other' : filterCategory) as EventCategory] || PURPLE_THEME_BASE.accent;
 
-  const { data, isLoading, isError, refetch, isRefetching } = useQuery({
+  const { data, isLoading, isError, refetch, isFetching } = useQuery({
     queryKey: ['home_events', filterCategory, user?.hobbies, searchQuery],
     queryFn: async () => {
       const params: Record<string, any> = {};
@@ -123,9 +124,9 @@ export default function HomeScreen() {
           }}
         />
 
-        {isLoading ? (
-          <View style={styles.centerWrap}>
-            <Text style={styles.metaText}>Loading events...</Text>
+        {isLoading && !data ? (
+          <View style={styles.listContent}>
+            <EventListSkeleton />
           </View>
         ) : isError ? (
           <View style={styles.centerWrap}>
@@ -134,6 +135,10 @@ export default function HomeScreen() {
               <Text style={styles.retryText}>Retry</Text>
             </TouchableOpacity>
           </View>
+        ) : events.length === 0 ? (
+          <View style={styles.centerWrap}>
+            <Text style={styles.metaText}>No events found in this category.</Text>
+          </View>
         ) : (
           <FlatList
             data={events}
@@ -141,7 +146,7 @@ export default function HomeScreen() {
             contentContainerStyle={styles.listContent}
             showsVerticalScrollIndicator={false}
             onRefresh={refetch}
-            refreshing={isRefetching}
+            refreshing={isFetching}
             ListEmptyComponent={<Text style={styles.metaText}>No events found in this category.</Text>}
             renderItem={({ item }) => (
               <EventCard

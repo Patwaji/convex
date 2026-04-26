@@ -12,6 +12,7 @@ import { useEventsStore } from '../store/eventsStore';
 import { useAuthStore } from '../../auth/store/authStore';
 import { Event, EventCategory } from '../types';
 import { categoryThemes } from '../../../shared/theme/categoryThemes';
+import { EventListSkeleton } from '../../../shared/components/Skeleton';
 
 type Props = StackScreenProps<EventsStackParamList, 'EventList'>;
 
@@ -181,21 +182,6 @@ export default function EventListScreen({ navigation }: Props) {
     ...events.map((event) => ({ type: 'event' as const, key: event._id, event })),
   ];
 
-  const renderSkeleton = () => (
-    <View style={styles.skeletonContainer}>
-      {[1, 2, 3].map((key) => (
-        <View key={key} style={styles.skeletonCard}>
-          <View style={[styles.skeletonImage, { backgroundColor: '#E2E8F0' }]} />
-          <View style={styles.skeletonContent}>
-            <View style={[styles.skeletonLine, { width: '40%', backgroundColor: '#E2E8F0' }]} />
-            <View style={[styles.skeletonLine, { width: '70%', backgroundColor: '#E2E8F0' }]} />
-            <View style={[styles.skeletonLine, { width: '50%', backgroundColor: '#E2E8F0' }]} />
-          </View>
-        </View>
-      ))}
-    </View>
-  );
-
   const renderCategoryPill = ({ item }: { item: typeof CATEGORIES[number] }) => {
     const isSelected = filterCategory === item;
     return (
@@ -326,7 +312,7 @@ export default function EventListScreen({ navigation }: Props) {
     <View style={styles.container}>
 
       {isLoading ? (
-        renderSkeleton()
+        <EventListSkeleton />
       ) : isError ? (
         <View style={styles.centerContainer}>
           <Text style={[styles.errorText, { color: '#EF4444' }]}>Failed to load events.</Text>

@@ -4,19 +4,21 @@ import { z } from 'zod';
 import * as eventController from './event.controller';
 import { optionalAuth, verifyToken } from '../auth/auth.middleware';
 import { asyncWrapper } from '../../shared/utils/asyncWrapper';
+import { cacheMiddleware, invalidateCache } from '../../shared/utils/responseCache';
 
 const router = Router();
 const upload = multer({
-	storage: multer.memoryStorage(),
-	limits: { fileSize: 8 * 1024 * 1024 },
+ 	storage: multer.memoryStorage(),
+ 	limits: { fileSize: 8 * 1024 * 1024 },
 });
 
 // ─── Public Routes ──────────────────────────────────────────
 // GET /api/events — list approved events (paginated, filterable)
-router.get('/', asyncWrapper(eventController.listEvents));
+// Cache for 5 minutes - same as frontend staleTime
+router.get('/', cacheMiddleware(300), asyncWrapper(eventController.listEvents));
 
 // GET /api/events/nearby — geo search
-router.get('/nearby', asyncWrapper(eventController.getNearbyEvents));
+router.get('/nearby', cacheMiddleware(300), asyncWrapper(eventController.getNearbyEvents));
 
 // GET /api/events/:id/similar — get similar events
 router.get('/:id/similar', asyncWrapper(eventController.getSimilarEvents));
@@ -36,6 +38,7 @@ router.get('/:id', optionalAuth, asyncWrapper(eventController.getEventById));
 
 // POST /api/events — create event (auth required)
 router.post('/', verifyToken, asyncWrapper(eventController.createEvent));
+invalidateCache('/api/events');
 
 // POST /api/events/upload-cover — upload event cover image (auth required)
 router.post('/upload-cover', verifyToken, upload.single('image'), asyncWrapper(eventController.uploadCoverImage));

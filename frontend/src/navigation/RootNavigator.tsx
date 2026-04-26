@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { View, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, StyleSheet, ActivityIndicator } from 'react-native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { NavigationContainer } from '@react-navigation/native';
@@ -8,6 +8,7 @@ import Icon from '../shared/components/AppIcon';
 import { CustomBottomTabBar } from '../shared/components/BottomNav';
 import { AdminBottomTabBar } from '../shared/components/AdminBottomNav';
 import { useQuery } from '@tanstack/react-query';
+import CategoryFlowLoader from '../shared/components/CategoryFlowLoader';
 
 import { AuthStackParamList, AppTabsParamList, RootStackParamList, UserStackParamList } from './types';
 import { useAuthStore } from '../features/auth/store/authStore';
@@ -278,11 +279,7 @@ export const RootNavigator = () => {
   }, [logout, restoreSession, setLoading]);
 
   if (isLoading) {
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: APP_THEME.background }}>
-        <ActivityIndicator size="large" color={APP_THEME.accent} />
-      </View>
-    );
+    return <CategoryFlowLoader />;
   }
 
   return (

@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, RefreshControl, Modal } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl, Modal } from 'react-native';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import Icon from '../../../shared/components/AppIcon';
+import { NotificationSkeleton } from '../../../shared/components/Skeleton';
 import { formatDistanceToNow } from 'date-fns';
 import { useNavigation } from '@react-navigation/native';
 
@@ -171,7 +172,7 @@ export default function NotificationsScreen({ adminTheme }: Props) {
       </View>
 
       {isLoading ? (
-        <ActivityIndicator size="large" color={theme.accent} style={styles.loader} />
+        <NotificationSkeleton />
       ) : data?.notifications.length === 0 ? (
         <View style={styles.emptyContainer}>
           <Icon name="bell-off" size={48} color={theme.textSecondary} />

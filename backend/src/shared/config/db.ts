@@ -3,7 +3,12 @@ import { env } from './env';
 
 export async function connectDB(): Promise<void> {
   try {
-    const conn = await mongoose.connect(env.MONGODB_URI);
+    const conn = await mongoose.connect(env.MONGODB_URI, {
+      maxPoolSize: 10,
+      minPoolSize: 2,
+      socketTimeoutMS: 45000,
+      serverSelectionTimeoutMS: 5000,
+    });
     console.log(`✅ MongoDB connected: ${conn.connection.host}`);
   } catch (error) {
     console.error('❌ MongoDB connection failed:', error);

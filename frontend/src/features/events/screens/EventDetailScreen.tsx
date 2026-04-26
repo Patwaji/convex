@@ -6,6 +6,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import FastImage from 'react-native-fast-image';
 import Icon from '../../../shared/components/AppIcon';
 import { format } from 'date-fns';
+import { DetailSkeleton } from '../../../shared/components/Skeleton';
 
 import { EventsStackParamList } from '../../../navigation/types';
 import { apiClient } from '../../../shared/api/client';
@@ -278,7 +279,7 @@ function EventDetailContent({ navigation, route }: { navigation: EventDetailScre
   if (isLoading || !event) {
     return (
       <View style={[styles.center, { backgroundColor: theme.background }]}>
-        <ActivityIndicator size="large" color={theme.accent} />
+        <DetailSkeleton />
       </View>
     );
   }

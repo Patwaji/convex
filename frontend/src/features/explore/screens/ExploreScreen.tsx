@@ -16,6 +16,7 @@ import { StackNavigationProp } from '@react-navigation/stack';
 import { useQuery } from '@tanstack/react-query';
 import GetLocation from 'react-native-get-location';
 import Icon from '../../../shared/components/AppIcon';
+import { ExploreSkeleton } from '../../../shared/components/Skeleton';
 import { useEventsStore } from '../../events/store/eventsStore';
 import { getStylesForCategory, categoryThemes } from '../../../shared/theme/categoryThemes';
 import { Event, EventCategory } from '../../events/types';
@@ -374,10 +375,7 @@ export default function ExploreScreen() {
   return (
     <View style={[styles.container, categoryStyles.container]}>
       {nearbyQuery.isLoading && !nearbyQuery.data ? (
-        <View style={styles.loaderWrap}>
-          <ActivityIndicator size="large" color={theme.accent} />
-          <Text style={[styles.loaderText, { color: theme.textSecondary }]}>Finding nearby events...</Text>
-        </View>
+        <ExploreSkeleton />
       ) : (
         <FlatList
           data={filteredEvents}

@@ -77,25 +77,18 @@ async function cleanupExpiredEventsIfNeeded(): Promise<void> {
   }
   lastExpiryCleanupAt = now;
 
-  const expiredEvents = await Event.find({ date: { $lte: new Date() } })
-    .select('_id')
-    .lean();
+  try {
+    const result = await Event.deleteMany({ 
+      date: { $lte: new Date() },
+      status: 'approved'
+    }).lean();
 
-  if (!expiredEvents.length) return;
-
-  const expiredIds = expiredEvents.map((event) => event._id);
-
-  await Promise.all([
-    Event.deleteMany({ _id: { $in: expiredIds } }),
-    User.updateMany(
-      { createdEvents: { $in: expiredIds } },
-      { $pull: { createdEvents: { $in: expiredIds } } }
-    ),
-    User.updateMany(
-      { joinedEvents: { $in: expiredIds } },
-      { $pull: { joinedEvents: { $in: expiredIds } } }
-    ),
-  ]);
+    if (result.deletedCount > 0) {
+      console.log(`🧹 Cleaned up ${result.deletedCount} expired events`);
+    }
+  } catch (error) {
+    console.error('Cleanup error:', error);
+  }
 }
 
 function normalizeOrganizer(organizer: any) {
